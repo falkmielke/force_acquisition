@@ -725,6 +725,16 @@ def TestGPIOInput(pin_nr = 3):
 ################################################################################
 ### MCC USB1608G DAQ                                                         ###
 ################################################################################
+
+instrument_labels = { '01DF5B18': 'blue' \
+                    , '01DF5AFB': 'green'
+                    }
+
+status_dict = { \
+                UL.ScanStatus.IDLE: 'idle' \
+                , UL.ScanStatus.RUNNING: 'running' \
+              }
+
 class MCCDAQ(object):
     # generic device functions
 
@@ -828,7 +838,7 @@ class MCCDAQ(object):
 # DAQ status
 #______________________________________________________________________
     def GetDAQStatus(self):
-        return status_dict[self.analog_input.get_scan_status()[0]]
+        return self.analog_input.get_scan_status()
 
     def DAQIsRunning(self):
         return self.analog_input.get_scan_status()[0] is UL.ScanStatus.RUNNING
@@ -922,6 +932,9 @@ class MCCDAQ(object):
         # defined by subclasses
         pass
 
+    def __str__(self):
+        descriptor = self.daq_device.get_descriptor()
+        return descriptor.dev_string + ' "' + instrument_labels[descriptor.unique_id] + '"'
 
 #______________________________________________________________________
 # Destructor
@@ -1193,7 +1206,7 @@ class AnalogInput(MCCDAQ):
 ### Force Plate Settings                                                     ###
 ################################################################################
 def AssembleForceplateSettings():
-    forceplate_settings = {'amti': {}, 'joystick': {}, 'kistler': {}}
+    forceplate_settings = {'amti': {}, 'joystick': {}, 'kistler': {}, 'dualkistler': {}}
     ### AMTI
     forceplate_settings['amti']['measures'] \
                     = ['forces', 'moments']
@@ -1234,6 +1247,37 @@ def AssembleForceplateSettings():
                         , 'Fz1': (0.8,0.2,0.4), 'Fz2': (0.8,0.4,0.2), 'Fz3': (0.8,0.4,0.4), 'Fz4': (0.8,0.2,0.2) \
                       }
     # kistler_calib_gain100_1000
+
+
+    ### Dual Kistler
+    forceplate_settings['dualkistler']['measures'] \
+                    = ['Fxy', 'Fz']
+    forceplate_settings['dualkistler']['data_columns'] \
+                    = { \
+                          'Fxy':  ['AFx12', 'AFx34', 'AFy14', 'AFy23'] \
+                                + ['BFx12', 'BFx34', 'BFy14', 'BFy23'] \
+                        , 'Fz':   ['AFz1', 'AFz2', 'AFz3', 'AFz4'] \
+                                + ['BFz1', 'BFz2', 'BFz3', 'BFz4'] \
+                      }
+
+    forceplate_settings['dualkistler']['channel_order'] \
+                    = [ 'AFx12', 'AFx34', 'AFy14', 'AFy23' \
+                      , 'BFx12', 'BFx34', 'BFy14', 'BFy23' \
+                      , 'AFz1', 'AFz2', 'AFz3', 'AFz4' \
+                      , 'BFz1', 'BFz2', 'BFz3', 'BFz4' \
+                      ] # channel order on the MCC board
+
+    forceplate_settings['dualkistler']['v_range'] \
+                    = 10. # V
+    forceplate_settings['dualkistler']['colors'] \
+                    = {   'AFx12': (0.4, 0.2, 0.8), 'AFx34': (0.2, 0.4, 0.8), 'AFy14': (0.2, 0.8, 0.4), 'AFy23': (0.4, 0.8, 0.2) \
+                        , 'BFx12': (0.4, 0.2, 0.8), 'BFx34': (0.2, 0.4, 0.8), 'BFy14': (0.2, 0.8, 0.4), 'BFy23': (0.4, 0.8, 0.2) \
+                        , 'AFz1':  (0.8, 0.2, 0.4), 'AFz2':  (0.8, 0.4, 0.2), 'AFz3':  (0.8, 0.4, 0.4), 'AFz4':  (0.8, 0.2, 0.2) \
+                        , 'BFz1':  (0.8, 0.2, 0.4), 'BFz2':  (0.8, 0.4, 0.2), 'BFz3':  (0.8, 0.4, 0.4), 'BFz4':  (0.8, 0.2, 0.2) \
+                      }
+    # kistler_calib_gain100_1000
+
+
 
     ### Joystick
     forceplate_settings['joystick']['measures'] \
@@ -1561,7 +1605,7 @@ class DAQForcePlateSoS(AnalogInput):
                     triggered_bit = None
 
                 elif triggered_bit == self.pins.get('reference', -1):
-                    print ('reference recording...', end='')
+                    print ('reference recording...', end = '')
                     self.ReferenceRecording()
                     triggered_bit = None
 
@@ -1570,8 +1614,8 @@ class DAQForcePlateSoS(AnalogInput):
                     break
 
 
-            print ('triggered on DAQ channel %i. ' % (triggered_bit), end='') 
-        print ('recording...' , end='')
+            print ('triggered on DAQ channel %i. ' % (triggered_bit), end = '') 
+        print ('recording...' , end = '')
         self.Record()
         print ('done! ')
 
@@ -1579,7 +1623,7 @@ class DAQForcePlateSoS(AnalogInput):
         times, data = self.RetrieveOutput(verbose = False)
         self.store.append([times, data])
 
-        print ('Awaiting reference recording (empty force plate)...', end='')
+        print ('Awaiting reference recording (empty force plate)...', end = '')
         triggered_bit = self.AwaitTrigger()
         if triggered_bit:
             self.ReferenceRecording()
@@ -1674,7 +1718,7 @@ class DAQForcePlateSoS(AnalogInput):
             raise Exception('please set a baseline duration > 0!')
             return
 
-        print ('baseline recording...', end='')
+        print ('baseline recording...', end = '')
         # set recording duration to baseline duration
         standard_duration = self.recording_duration
         self.recording_duration = self.baseline_duration # s
@@ -1713,11 +1757,14 @@ class DAQForcePlateSoS(AnalogInput):
 ### MCC USB1608G Force Plate                                                 ###
 ################################################################################
 class TriggeredForcePlateDAQ(AnalogInput):
-# TODO
+
+    # record on external trigger
+    recording_mode = UL.ScanOption.EXTTRIGGER
+
 #______________________________________________________________________
 # Construction
 #______________________________________________________________________
-    def __init__(self, fp_type, pins, baseline_duration = 0 \
+    def __init__(self, fp_type, pins \
                 , *args, **kwargs):
         self.fp_type = fp_type
 
@@ -1727,21 +1774,12 @@ class TriggeredForcePlateDAQ(AnalogInput):
         self.has_indicator = False
         if (self.pins is not None) and (type(self.pins) is dict):
             self.has_indicator = self.pins.get('led', None) is not None
-            self.is_triggered = self.pins.get('trigger', None) is not None
-            self.is_multitriggered = (self.pins.get('baseline', None) is not None) \
-                                    or (self.pins.get('reference', None) is not None)
-
-        # check whether baseline is recorded before actual recording
-        if baseline_duration > 0:
-            self.prerecord_baseline = True
-        self.baseline_duration = baseline_duration
 
         # stores actual data
         self.times = {}
         self.data = None
-
-        # stores the data of baseline qnd reference (empty) recordings
         self.store = []
+
 
         ## initialize DAQ
         kwargs['channel_labels'] = forceplate_settings[self.fp_type]['channel_order']
@@ -1757,29 +1795,6 @@ class TriggeredForcePlateDAQ(AnalogInput):
                             )
         
 
-        ## connect trigger or multiple triggers
-        if self.is_multitriggered:
-            triggers = [self.pins['trigger']]
-            for trig in ['baseline', 'reference']:
-                pin = self.pins.get(trig, None)
-                if pin is not None:
-                    triggers.append(pin)
-            print (triggers)
-            self.pins['triggers'] = triggers
-
-            self.trigger = MultiTrigger( \
-                                      digital_io = self.digital_io \
-                                    , port = self.port \
-                                    , pin_nr = triggers \
-                                    , rising = True \
-                                  )
-        elif self.is_triggered:
-            self.trigger = MultiTrigger( \
-                                      digital_io = self.digital_io \
-                                    , port = self.port \
-                                    , pin_nr = [self.pins['trigger']] \
-                                    , rising = True \
-                                  )
 
 
     def SetPins(self):
@@ -1787,8 +1802,6 @@ class TriggeredForcePlateDAQ(AnalogInput):
         if self.has_indicator:
             # set pin to output
             self.digital_io.d_config_bit(self.port, self.pins['led'], UL.DigitalDirection.OUTPUT)
-        if self.is_triggered:
-            self.digital_io.d_config_bit(self.port, self.pins['trigger'], UL.DigitalDirection.INPUT)
 
 
 #______________________________________________________________________
@@ -1803,105 +1816,49 @@ class TriggeredForcePlateDAQ(AnalogInput):
         self.led.Switch(value)
 
 
-    def AwaitTrigger(self):
-        return self.trigger.Await(scan_frq = self.scan_frq)
+
+    def StdOut(self, *args, **kwargs):
+        print(*args, **kwargs)
+
     
 
 #______________________________________________________________________
 # I/O
 #______________________________________________________________________
-    def TriggeredRecording(self):
-
-        if self.is_triggered or self.is_multitriggered:
-            triggered_bit = None
-            while triggered_bit is None:
-                # wait for a trigger
-
-                print ('waiting for triggers on channels %s.' % (str(self.pins.get('triggers', self.pins['trigger']))))
-                triggered_bit = self.AwaitTrigger()
-
-                # triggering failed
-                if triggered_bit is None:
-                    return
-
-                # take a baseline recording
-                if triggered_bit == self.pins.get('baseline', -1):
-                    self.BaselineRecording()
-
-                    # exit if only baseline is recorded
-                    if not self.prerecord_baseline:
-                        return
-
-                    # optionally repeat triggering
-                    triggered_bit = None
-
-                elif triggered_bit == self.pins.get('reference', -1):
-                    print ('reference recording...', end='')
-                    self.ReferenceRecording()
-                    triggered_bit = None
-
-                else:
-                    # a recording bit has been hit, take real recording
-                    break
-
-
-            print ('triggered on DAQ channel %i. ' % (triggered_bit), end='') 
-        print ('recording...' , end='')
-        self.Record()
-        print ('done! ')
+    def Record(self):
+        self.StdOut('waiting for trigger... ' , end = '\r')
+        self.TriggeredRecording()
+        self.StdOut('done! ', ' '*20)
 
         # store data
         times, data = self.RetrieveOutput(verbose = False)
         self.store.append([times, data])
 
-        print ('Awaiting reference recording (empty force plate)...', end='')
-        triggered_bit = self.AwaitTrigger()
-        if triggered_bit:
-            self.ReferenceRecording()
-        print ('all done!')
 
 
-    def RetrieveOutput(self, reference = False, baseline = False, *args, **kwargs):
-        times, data = super(TriggeredForcePlateDAQ, self).RetrieveOutput()
-        times = times.copy()
-        data = data.copy()
+    def TriggeredRecording(self):
 
-        data['reference'] = reference
-        data['baseline'] = baseline
-
-        return times, data
-
-    def CombinedOutput(self):
-
-        sync_data = {'time': [], 'type': []}
-        force_data = []
-        for rec_nr, (times, data) in enumerate(self.store):
-            for tp, tt in times.items():
-                sync_data['time'].append(tt)
-                sync_data['type'].append( tp + "_trigger%i" % (rec_nr) )
-
-            data['nr'] = rec_nr
-            force_data.append(data)
-        sync_data = PD.DataFrame.from_dict(sync_data)
-        force_data = PD.concat(force_data, axis = 0)
-
-        return sync_data, force_data
-
-    def Record(self):
-
-        self.Indicate(True)
-
-        self.times['start'] = TI.time()
+        # start recording in the background (will wait for trigger)
         self.rate = self.analog_input.a_in_scan(**self.recording_settings)
 
+        # wait until force plate records
+        while self.GetDAQStatus()[1].current_scan_count == 0:
+            TI.sleep(1/self.scan_frq)
+
+        # store start time
+        self.times['start'] = TI.time()
+        # turn LED on
+        self.Indicate(True)
+
+        # wait until recording has ended
+        self.StdOut('recording... ', ' '*20, end = '\r')
         while not self.DAQIsIdle():
             TI.sleep(1/self.scan_frq)
 
+        # store stop time
         self.times['stop'] = TI.time()
+        # turn LED off
         self.Indicate(False)
-
-
-
 
 
 
@@ -2932,7 +2889,7 @@ def PlotKistlerForces(data):
     PolishAx(z_ax)
 
     xy_ax.set_xlim([NP.min(data.index.values), NP.max(data.index.values)])
-    xy_ax.set_ylim([-forceplate_settings['amti']['v_range'], forceplate_settings['amti']['v_range']])
+    xy_ax.set_ylim([-forceplate_settings['kistler']['v_range'], forceplate_settings['kistler']['v_range']])
     z_ax.set_xlabel('time (s)')
     xy_ax.set_ylabel('voltage (V)')
     z_ax.set_ylabel('voltage (V)')
@@ -3129,8 +3086,57 @@ def TestQuickAnalysis():
 
 
 
+################################################################################
+### Multi DAQ Testing                                                        ###
+################################################################################
+def PlotDualKistlerForces(data):
+
+    fig = MPP.figure()
+    PreparePlot()
+
+    xy_ax = fig.add_subplot(2,1,1)
+    z_ax = fig.add_subplot(2,1,2, sharex = xy_ax, sharey = xy_ax)
+
+
+    for param in forceplate_settings['dualkistler']['data_columns']['Fxy']:
+        # print (param, data.loc[:, param].values)
+        xy_ax.plot(data.index.values, data.loc[:, param].values, color = forceplate_settings['dualkistler']['colors'][param])
+    for param in forceplate_settings['dualkistler']['data_columns']['Fz']:
+        z_ax.plot(data.index.values, data.loc[:, param].values, color = forceplate_settings['dualkistler']['colors'][param])
+
+    PolishAx(xy_ax)
+    PolishAx(z_ax)
+
+    xy_ax.set_xlim([NP.min(data.index.values), NP.max(data.index.values)])
+    xy_ax.set_ylim([-forceplate_settings['dualkistler']['v_range'], forceplate_settings['dualkistler']['v_range']])
+    z_ax.set_xlabel('time (s)')
+    xy_ax.set_ylabel('voltage (V)')
+    z_ax.set_ylabel('voltage (V)')
+    MPP.show()
+
+
+
 def TestMultiDAQ():
-    pass
+    with TriggeredForcePlateDAQ( \
+                  fp_type = 'dualkistler' \
+                , device_nr = 1 \
+                , pins = {'led': 7} \
+                , sampling_rate = 1e3 \
+                , scan_frq = 1e1 \
+                , recording_duration = 6. \
+                ) \
+        as fp: 
+        try:
+            fp.Record()
+        except Exception as e:
+            print (e, '\n')
+
+        times, data = fp.store[0]
+        # print (times, data)        
+
+        PlotDualKistlerForces(data)
+
+    
     # pin_nr = 7
     # daq1_blue = DAQ_DigitalOutput(digital_pin = pin_nr, device_nr = 0)
     # daq2_green = DAQ_DigitalOutput(digital_pin = pin_nr, device_nr = 1)
