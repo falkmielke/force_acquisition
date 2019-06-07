@@ -2,7 +2,7 @@
 # Universiteit Antwerpen
 # Functional Morphology
 # Falk Mielke
-# 2019/05/25
+# 2019/06/06
 
 # contains parts as ADAPTATION of https://github.com/adafruit/Adafruit_Python_GPIO
 # used to connect I2C via the FT232H interface
@@ -79,9 +79,6 @@ FT232H_VID = 0x0403   # Default FTDI FT232H vendor ID
 FT232H_PID = 0x6014   # Default FTDI FT232H product ID
 
 _REPEAT_DELAY = 4
-
-
-
 
 
 
@@ -1206,7 +1203,7 @@ class AnalogInput(MCCDAQ):
 ### Force Plate Settings                                                     ###
 ################################################################################
 def AssembleForceplateSettings():
-    forceplate_settings = {'amti': {}, 'joystick': {}, 'kistler': {}, 'dualkistler': {}}
+    forceplate_settings = {'amti': {}, 'joystick': {}, 'kistler': {}, 'dualkistler': {}, 'dualkistler2': {}}
     ### AMTI
     forceplate_settings['amti']['measures'] \
                     = ['forces', 'moments']
@@ -1274,6 +1271,34 @@ def AssembleForceplateSettings():
                         , 'BFx12': (0.4, 0.2, 0.8), 'BFx34': (0.2, 0.4, 0.8), 'BFy14': (0.2, 0.8, 0.4), 'BFy23': (0.4, 0.8, 0.2) \
                         , 'AFz1':  (0.8, 0.2, 0.4), 'AFz2':  (0.8, 0.4, 0.2), 'AFz3':  (0.8, 0.4, 0.4), 'AFz4':  (0.8, 0.2, 0.2) \
                         , 'BFz1':  (0.8, 0.2, 0.4), 'BFz2':  (0.8, 0.4, 0.2), 'BFz3':  (0.8, 0.4, 0.4), 'BFz4':  (0.8, 0.2, 0.2) \
+                      }
+    # kistler_calib_gain100_1000
+
+ ### Dual Kistler
+    forceplate_settings['dualkistler2']['measures'] \
+                    = ['Fxy', 'Fz']
+    forceplate_settings['dualkistler2']['data_columns'] \
+                    = { \
+                          'Fxy':  ['CFx12', 'CFx34', 'CFy14', 'CFy23'] \
+                                + ['DFx12', 'DFx34', 'DFy14', 'DFy23'] \
+                        , 'Fz':   ['CFz1', 'CFz2', 'CFz3', 'CFz4'] \
+                                + ['DFz1', 'DFz2', 'DFz3', 'DFz4'] \
+                      }
+
+    forceplate_settings['dualkistler2']['channel_order'] \
+                    = [ 'CFx12', 'CFx34', 'CFy14', 'CFy23' \
+                      , 'DFx12', 'DFx34', 'DFy14', 'DFy23' \
+                      , 'CFz1', 'CFz2', 'CFz3', 'CFz4' \
+                      , 'DFz1', 'DFz2', 'DFz3', 'DFz4' \
+                      ] # channel order on the MCC board
+
+    forceplate_settings['dualkistler2']['v_range'] \
+                    = 10. # V
+    forceplate_settings['dualkistler2']['colors'] \
+                    = {   'CFx12': (0.4, 0.2, 0.8), 'CFx34': (0.2, 0.4, 0.8), 'CFy14': (0.2, 0.8, 0.4), 'CFy23': (0.4, 0.8, 0.2) \
+                        , 'DFx12': (0.4, 0.2, 0.8), 'DFx34': (0.2, 0.4, 0.8), 'DFy14': (0.2, 0.8, 0.4), 'DFy23': (0.4, 0.8, 0.2) \
+                        , 'CFz1':  (0.8, 0.2, 0.4), 'CFz2':  (0.8, 0.4, 0.2), 'CFz3':  (0.8, 0.4, 0.4), 'CFz4':  (0.8, 0.2, 0.2) \
+                        , 'DFz1':  (0.8, 0.2, 0.4), 'DFz2':  (0.8, 0.4, 0.2), 'DFz3':  (0.8, 0.4, 0.4), 'DFz4':  (0.8, 0.2, 0.2) \
                       }
     # kistler_calib_gain100_1000
 
@@ -1767,6 +1792,7 @@ class TriggeredForcePlateDAQ(AnalogInput):
     def __init__(self, fp_type, pins \
                 , *args, **kwargs):
         self.fp_type = fp_type
+        self.label = instrument_labels[self.daq_device.get_descriptor().unique_id]
 
         # indicator and trigger pins
         self.pins = pins
@@ -1776,7 +1802,7 @@ class TriggeredForcePlateDAQ(AnalogInput):
             self.has_indicator = self.pins.get('led', None) is not None
 
         # stores actual data
-        self.times = {}
+        self.sync = []
         self.data = None
         self.store = []
 
@@ -1831,7 +1857,7 @@ class TriggeredForcePlateDAQ(AnalogInput):
         self.StdOut('done! ', ' '*20)
 
         # store data
-        times, data = self.RetrieveOutput(verbose = False)
+        times, data = self.RetrieveOutput()
         self.store.append([times, data])
 
 
@@ -1841,26 +1867,46 @@ class TriggeredForcePlateDAQ(AnalogInput):
         # start recording in the background (will wait for trigger)
         self.rate = self.analog_input.a_in_scan(**self.recording_settings)
 
+        self.sync.append([TI.time(), -1] )
+
         # wait until force plate records
         while self.GetDAQStatus()[1].current_scan_count == 0:
             TI.sleep(1/self.scan_frq)
 
         # store start time
-        self.times['start'] = TI.time()
+        # self.sync.append([TI.time(), -self.GetDAQStatus()[1].current_total_count] )
         # turn LED on
         self.Indicate(True)
 
         # wait until recording has ended
         self.StdOut('recording... ', ' '*20, end = '\r')
+        counter = 0
         while not self.DAQIsIdle():
+            if (counter % 1000) == 0:
+                self.sync.append([TI.time(), self.GetDAQStatus()[1].current_scan_count] )
+
             TI.sleep(1/self.scan_frq)
+            counter += 1
 
         # store stop time
-        self.times['stop'] = TI.time()
+        self.sync.append([TI.time(), -1] )
         # turn LED off
         self.Indicate(False)
 
 
+#______________________________________________________________________
+# Data reporting
+#______________________________________________________________________
+    def RetrieveOutput(self):
+        data = NP.array(self.buffer).reshape([-1,len(self.channel_labels)])
+        data = PD.DataFrame(data, columns = self.channel_labels)
+        data.index = NP.arange(data.shape[0]) / self.rate 
+        data.index.name = 'time'
+
+        time_out = PD.DataFrame(NP.stack(self.sync, axis = 0), columns = ['time', 'current_scan_count'])
+        # print (time_out)
+
+        return time_out, data
 
 
 
@@ -3122,7 +3168,7 @@ def TestMultiDAQ():
                 , device_nr = 1 \
                 , pins = {'led': 7} \
                 , sampling_rate = 1e3 \
-                , scan_frq = 1e1 \
+                , scan_frq = 1e6 \
                 , recording_duration = 6. \
                 ) \
         as fp: 
@@ -3182,15 +3228,3 @@ if __name__ == "__main__":
     # check _REPEAT_DELAY reduction
 
 
-
-
-#
-
-# sensor_placement = {  '1_head': 'FT41D5QH' \
-#                     , '2_thorax': 'FT3LNTOQ' \
-#                     , '3_sacrum': 'FT3K3U7G' \
-#                     , '4': 'FT3R4AGM' \
-#                     , '5': 'FT3HB2KB' \
-#                     , '6': 'FT446MAY' \
-#                     , '7': 'FT3Z4V74' \
-#                     }                                                                                                                                     
