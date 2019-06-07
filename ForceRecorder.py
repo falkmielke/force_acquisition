@@ -239,7 +239,7 @@ class ForceRecorder(object):
             rec_nr, daq, data = self.q.popleft()
 
             # restore background
-            self.fig.canvas.restore_region(self.plot_backgrounds[daq])
+            # self.fig.canvas.restore_region(self.plot_backgrounds[daq])
             self.RestoreAxes()
 
             # self.fig.suptitle("recording %i" % (rec_nr))
@@ -409,7 +409,7 @@ plot_splits = { \
 if __name__ == "__main__":
 
 
-    recording_duration = 6 # s
+    recording_duration = 10 # s
     fr = ForceRecorder(   recording_duration = recording_duration \
                         , label = 'goa' \
                         , sampling_rate = 1e3 \
