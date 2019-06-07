@@ -759,6 +759,7 @@ class MCCDAQ(object):
 
         self.AssembleAndConnect(descriptor_index = device_nr)
 
+        self.label = str(self)
 
         EXIT.register(self.Quit)
 
@@ -936,27 +937,27 @@ class MCCDAQ(object):
 #______________________________________________________________________
 # Destructor
 #______________________________________________________________________
-    def Quit(self, confirm = True):
-        # safely exit
-        if not self.alive:
-            SYS.exit()
-            return
+    # def Quit(self, confirm = True):
+    #     # safely exit
+    #     if not self.alive:
+    #         SYS.exit()
+    #         return
 
-        if confirm:
-            if not TK.messagebox.askyesno("Quit","really quit?"):
-                return
+    #     if confirm:
+    #         if not TK.messagebox.askyesno("Quit","really quit?"):
+    #             return
 
-        if self.daq_device:
-            # Stop the acquisition if it is still running.
-            if not self.DAQIsIdle():
-                self.analog_input.scan_stop()
-            if self.daq_device.is_connected():
-                self.daq_device.disconnect()
-            self.daq_device.release()
-        print('safely exited.')
-        self.alive = False
+    #     if self.daq_device:
+    #         # Stop the acquisition if it is still running.
+    #         if not self.DAQIsIdle():
+    #             self.analog_input.scan_stop()
+    #         if self.daq_device.is_connected():
+    #             self.daq_device.disconnect()
+    #         self.daq_device.release()
+    #     print('safely exited %s.' % (str(self)))
+    #     self.alive = False
 
-        SYS.exit()
+    #     SYS.exit()
 
 
 
@@ -985,7 +986,7 @@ class MCCDAQ(object):
             if self.daq_device.is_connected():
                 self.daq_device.disconnect()
             self.daq_device.release()
-        print('safely exited.')
+        print('safely exited %s.' % (self.label))
         self.alive = False
 
         SYS.exit()
@@ -1792,7 +1793,6 @@ class TriggeredForcePlateDAQ(AnalogInput):
     def __init__(self, fp_type, pins \
                 , *args, **kwargs):
         self.fp_type = fp_type
-        self.label = instrument_labels[self.daq_device.get_descriptor().unique_id]
 
         # indicator and trigger pins
         self.pins = pins
@@ -1802,9 +1802,7 @@ class TriggeredForcePlateDAQ(AnalogInput):
             self.has_indicator = self.pins.get('led', None) is not None
 
         # stores actual data
-        self.sync = []
-        self.data = None
-        self.store = []
+        self.Empty()
 
 
         ## initialize DAQ
@@ -1820,8 +1818,15 @@ class TriggeredForcePlateDAQ(AnalogInput):
                             , pin_nr = self.pins['led']\
                             )
         
+        # store label
+        self.label = instrument_labels[self.daq_device.get_descriptor().unique_id]
 
 
+    def Empty(self):
+        # remove previous data
+        self.sync = []
+        self.data = None
+        
 
     def SetPins(self):
         # set pin to input
@@ -1856,9 +1861,9 @@ class TriggeredForcePlateDAQ(AnalogInput):
         self.TriggeredRecording()
         self.StdOut('done! ', ' '*20)
 
-        # store data
-        times, data = self.RetrieveOutput()
-        self.store.append([times, data])
+        # # store data
+        # times, data = self.RetrieveOutput()
+        # self.store.append([times, data])
 
 
 
@@ -2724,6 +2729,96 @@ class MultiNXP(object):
 
 
 ################################################################################
+### Single Sensor Test                                                           ###
+################################################################################
+
+def PlotSingleSensor(device, data):
+
+    PreparePlot()
+
+
+    cm = 1./2.54
+    figwidth = 16 * cm
+    figheight = 12 * cm
+    fig = MPP.figure( \
+                              figsize = (figwidth, figheight) \
+                            , facecolor = None \
+                            )
+    # MPP.ion() # "interactive mode". Might e useful here, but i don't know. Try to turn it off later.
+
+# define axis spacing
+    fig.subplots_adjust( \
+                              top    = 0.96 \
+                            , right  = 0.98 \
+                            , bottom = 0.09 \
+                            , left   = 0.10 \
+                            , wspace = 0.20 # column spacing \
+                            , hspace = 0.20 # row spacing \
+                            )
+
+    columns = [0]
+    titles = {'a': 'accelerometer', 'g': 'gyroscope', 'm': 'compass'}
+    rows = ['a', 'g', 'm'] #
+    # roes = [0]
+    # print (data.columns)
+
+    # define subplots
+    gs = MP.gridspec.GridSpec( \
+                                  len(rows) \
+                                , len(columns) \
+                                , height_ratios = [1]*len(rows) \
+                                , width_ratios = [1]*len(columns) \
+                                )
+
+
+    ref_ax = None
+    for r, rw in enumerate(rows):
+        for c, col in enumerate(columns):
+
+            if ref_ax is None:
+                ax = fig.add_subplot(gs[r,c])
+                ref_ax = ax
+            else:
+                ax = fig.add_subplot(gs[r,c], sharex = ref_ax) # , sharey = ref_ax
+
+
+            # datacols = ["%s_%s" % (col,coord) for coord in coordinates]
+            datacols = ["%s_%s" % (rw,coord) for coord in coordinates]
+
+            ax.plot(data.index, data.loc[:, datacols].values )#* constants['g'])
+            ax.legend(["$%s$" % (dc) for dc in datacols])
+
+
+            PolishAx(ax)
+            if c == 0:
+                ax.set_ylabel(r"\textbf{%s}" % (titles[rw]) ) 
+            # if r == 0: 
+            #     ax.set_title()
+            if r == len(rows)-1: 
+                ax.set_xlabel('time (s)')
+
+    MPP.show()
+
+
+def TestSingleNXP():
+    clock_hz = 1.5e6
+    ft1 = FT232H(serial = FindDevices()[0], clock_hz = clock_hz) # 
+
+    sr = 10000 # pause rate; less relevant
+    recording_duration = 10. # seconds
+
+
+    device = NXP(ft1, clock_hz = clock_hz) # 0,1,2
+    signal = DeviceBufferLoader( device = device, generating_rate = sr ) #, max_length = 512 for post trigger
+
+    data = Record(ft1, signal, recording_duration)
+    print ('\t', data.shape[0]/recording_duration, 'Hz sampling rate')
+
+    PlotSingleSensor(device, data)
+
+
+
+################################################################################
 ### Multiplex Test                                                           ###
 ################################################################################
 def PlotMultiplex(device, data):
@@ -2827,6 +2922,8 @@ def Record(ft1, signal, recording_duration):
     # print (signal, data.shape)
     data = PD.DataFrame(data, index = time, columns = signal.device.config['columns'])
     return data
+
+
 
 
 def TestMultiplexNXP():
@@ -3204,6 +3301,7 @@ if __name__ == "__main__":
     ### FT232H breakout function
     # TestGPIO(7)
     # TestGPIOInput(5)
+    TestSingleNXP()
     # TestMultiplexNXP()
     # TestBufferedMultiplexedSensors()
 
@@ -3218,7 +3316,7 @@ if __name__ == "__main__":
 
     # TestQuickAnalysis()
 
-    TestMultiDAQ()
+    # TestMultiDAQ()
 
 
 
