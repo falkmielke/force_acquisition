@@ -718,6 +718,172 @@ def TestGPIOInput(pin_nr = 3):
     ft1.close()
 
 
+################################################################################
+### Trigger Logger = Trogger                                                 ###
+################################################################################
+
+class Ligger(TH.Thread):
+    # trigger listener
+
+    def __init__(self, output_file, header = None):
+        super(Ligger, self).__init__()
+        self.data_queue = QU.Queue()
+        self.output_file = output_file
+
+        if header is not None:
+            self.PrintFiles(header)
+
+        # self.counter = 0
+
+    def PrintFiles(self, result):
+        # self.counter += 1
+        # print ("writing", self.counter)
+        # print (">", result)
+        print(result, file = self.output_file)
+
+    def run(self):
+
+        self.running = True
+        while self.running:
+            if not self.data_queue.empty():
+                self.PrintFiles(self.data_queue.get())
+                continue
+            TI.sleep(1e-8)
+        # print ("stopped ligger")
+
+    def Stop(self):
+        while not self.data_queue.empty():
+            self.PrintFiles(self.data_queue.get())
+        # print ("stopped.")
+        self.running = False
+
+
+    def join(self, *args, **kwargs):
+        # print (self.data_queue)
+        # self.data_queue.join()
+        super(Ligger, self).join(*args, **kwargs)
+        # print ('all done')
+
+
+class Shouter(TH.Thread):
+    # A Logged Producer Process
+    def __init__(self, label, data_queue, autostart = False):
+        super(Shouter, self).__init__()
+        # self.in_queue = in_queue
+        self.data_queue = data_queue
+        self.label = label
+
+        self.setDaemon(True)
+
+        if autostart:
+            self.start()
+
+    def run(self):
+        self.running = True
+        while self.running:
+            self.Process()
+            TI.sleep(1e-8)
+        # print ("stopped %s" % str(self.label))
+
+    def Stop(self):
+        self.running = False
+
+    def Process(self):
+        # Do the processing job here
+        dice = RND.uniform(0.,1.,1)
+        if dice > 0.999:
+            self.data_queue.put( "%i;%.3f;%f" % (self.label, dice, TI.time()) )
+
+
+class LoggedPin(Shouter):
+    def __init__(self, ft_breakout, pin_nr, *args, **kwargs):
+        self.ft_breakout = ft_breakout
+        self.pin_nr = pin_nr
+        # kwargs['label'] = str(pin_nr)
+        self.ft_breakout.setup(self.pin_nr, IN)
+        self.status = self.ft_breakout.input(self.pin_nr)
+
+        super(LoggedPin, self).__init__(*args, **kwargs)
+
+
+    def Process(self):
+        # Do the processing job here
+        t = TI.time()
+        new_status = self.ft_breakout.input(self.pin_nr)
+        if new_status != self.status:
+            self.status = new_status
+            self.data_queue.put( "%i;%s;%f" % (self.pin_nr, str(self.status), t) )
+
+
+class Trogger(object):
+    # A Trigger-Logger
+
+    def __init__(self, pins = [], serial = None, storage_file = None):
+
+        if serial is None:
+            self.ft_breakout = FT232H(serial = FindDevices()[0])
+        else:
+            self.ft_breakout = FT232H(serial = serial)
+
+        if storage_file is None:
+            storage_file = "%s_log.txt" % (TI.strftime('%Y%m%d'))
+
+        # spawn threads to print
+        self.archivar = Ligger( open(storage_file, 'a') \
+                              , header = '#________\npin;changes_to;time_%s' % (TI.strftime('%Y%m%d')) \
+                              )
+        self.archivar.setDaemon(True)
+        self.archivar.start()
+
+        # spawn threads to process
+
+        self.logged_pins = [LoggedPin(self.ft_breakout, pin, data_queue = self.archivar.data_queue, autostart = True, label = str(pin)) for pin in pins]
+
+
+        EXIT.register(self.Quit)
+
+
+    def Log(self):
+        # TI.sleep(2)
+        while True:
+            TI.sleep(1e-2)
+
+
+    def Quit(self):
+        for lpin in self.logged_pins:
+            lpin.Stop()
+            lpin.join()
+
+        self.archivar.Stop()
+        self.archivar.join()
+
+        self.ft_breakout.close()
+        print ('safely exited.')
+
+
+    def __enter__(self):
+        # required for context management ("with")
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        # exiting when in context manager
+        self.Quit()
+
+
+
+def TestTrogger(pins = []):
+
+    with Trogger(pins) as trog:
+        try:
+            trog.Log()
+        except KeyboardInterrupt as ki:
+            trog.Quit()
+
+
+
+
+
+
 
 ################################################################################
 ### MCC USB1608G DAQ                                                         ###
@@ -3301,7 +3467,9 @@ if __name__ == "__main__":
     ### FT232H breakout function
     # TestGPIO(7)
     # TestGPIOInput(5)
-    TestSingleNXP()
+    TestTrogger(pins = [5])
+
+    # TestSingleNXP()
     # TestMultiplexNXP()
     # TestBufferedMultiplexedSensors()
 
