@@ -839,9 +839,10 @@ class Trogger(object):
 
         self.logged_pins = [LoggedPin(self.ft_breakout, pin, data_queue = self.archivar.data_queue, autostart = True, label = str(pin)) for pin in pins]
 
+        for lpin in self.logged_pins:
+            lpin.data_queue.put( "%i;%s;%f" % (lpin.pin_nr, str(lpin.status), TI.time()) )
 
         EXIT.register(self.Quit)
-
 
     def Log(self):
         # TI.sleep(2)
@@ -3467,7 +3468,7 @@ if __name__ == "__main__":
     ### FT232H breakout function
     # TestGPIO(7)
     # TestGPIOInput(5)
-    TestTrogger(pins = [5])
+    TestTrogger(pins = [3, 5])
 
     # TestSingleNXP()
     # TestMultiplexNXP()
