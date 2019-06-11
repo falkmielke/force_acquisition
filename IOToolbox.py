@@ -749,7 +749,7 @@ class Ligger(TH.Thread):
             if not self.data_queue.empty():
                 data_str = self.data_queue.get()
                 self.PrintFiles(data_str)
-                if data_str.split(';') == 'False':
+                if data_str.split(';')[1] == 'False':
                     self.led_queue.put(True)
                 continue
             TI.sleep(1e-8)
@@ -778,18 +778,17 @@ class TroggerLED(TH.Thread):
         self.led_queue = led_queue
         self.duration = duration
 
-
         self.ft_breakout.setup(self.pin, OUT)
 
         super(TroggerLED, self).__init__()
     
 
     def run(self):
-
+        # blink if receiving a queue signal
         self.running = True
         while self.running:
-            if not self.data_queue.empty():
-                if self.data_queue.get():
+            if not self.led_queue.empty():
+                if self.led_queue.get():
                     self.Blink()
             TI.sleep(1e-8)
         # print ("stopped ligger")
@@ -799,14 +798,14 @@ class TroggerLED(TH.Thread):
         
         for _ in range(int(self.duration//1)):
             # Set pin to a low level so the LED turns off.
-            self.ft_breakout.output(pin_nr, LOW)
+            self.ft_breakout.output(self.pin, LOW)
             TI.sleep(.5)
 
             # Set pin to a high level so the LED turns on.
-            self.ft_breakout.output(pin_nr, HIGH)
+            self.ft_breakout.output(self.pin, HIGH)
             TI.sleep(.5)
 
-        self.ft_breakout.output(pin_nr, LOW)
+        self.ft_breakout.output(self.pin, LOW)
 
     def Stop(self):
         self.running = False
@@ -892,6 +891,7 @@ class Trogger(object):
         for lpin in self.logged_pins:
             lpin.data_queue.put( "%i;%s;%f" % (lpin.pin_nr, str(lpin.status), TI.time()) )
 
+        print ('trogger led')
         self.indicator = TroggerLED(pin = 7, ft_breakout = self.ft_breakout, led_queue = self.archivar.led_queue) 
         self.indicator.setDaemon(True)
         self.indicator.start()
@@ -909,6 +909,8 @@ class Trogger(object):
             lpin.Stop()
             lpin.join()
 
+        self.indicator.Stop()
+        self.indicator.join()
         self.archivar.Stop()
         self.archivar.join()
 
