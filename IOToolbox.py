@@ -771,11 +771,12 @@ class Ligger(TH.Thread):
 class TroggerLED(TH.Thread):
     # trigger listener
 
-    def __init__(self, pin, ft_breakout, led_queue, duration = 10):
+    def __init__(self, pin, ft_breakout, led_queue, data_queue, duration = 10):
 
         self.pin = pin
         self.ft_breakout = ft_breakout
         self.led_queue = led_queue
+        self.data_queue = data_queue
         self.duration = duration
 
         self.ft_breakout.setup(self.pin, OUT)
@@ -802,6 +803,7 @@ class TroggerLED(TH.Thread):
             TI.sleep(.5)
 
             # Set pin to a high level so the LED turns on.
+            self.data_queue.put( "%i;%s;%f" % (7, True, TI.time()) )
             self.ft_breakout.output(self.pin, HIGH)
             TI.sleep(.5)
 
@@ -892,7 +894,7 @@ class Trogger(object):
             lpin.data_queue.put( "%i;%s;%f" % (lpin.pin_nr, str(lpin.status), TI.time()) )
 
         print ('trogger led')
-        self.indicator = TroggerLED(pin = 7, ft_breakout = self.ft_breakout, led_queue = self.archivar.led_queue) 
+        self.indicator = TroggerLED(pin = 7, ft_breakout = self.ft_breakout, led_queue = self.archivar.led_queue, data_queue = self.archivar.data_queue) 
         self.indicator.setDaemon(True)
         self.indicator.start()
 
