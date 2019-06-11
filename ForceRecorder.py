@@ -411,7 +411,7 @@ plot_splits = { \
 if __name__ == "__main__":
 
 
-    recording_duration = 6 # s
+    recording_duration = 10 # s
     fr = ForceRecorder(   recording_duration = recording_duration \
                         , label = 'goa' \
                         , sampling_rate = 1e3 \
