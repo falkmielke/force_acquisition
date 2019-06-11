@@ -728,6 +728,7 @@ class Ligger(TH.Thread):
     def __init__(self, output_file, header = None):
         super(Ligger, self).__init__()
         self.data_queue = QU.Queue()
+        self.led_queue = QU.Queue()
         self.output_file = output_file
 
         if header is not None:
@@ -746,7 +747,10 @@ class Ligger(TH.Thread):
         self.running = True
         while self.running:
             if not self.data_queue.empty():
-                self.PrintFiles(self.data_queue.get())
+                data_str = self.data_queue.get()
+                self.PrintFiles(data_str)
+                if data_str.split(';') == 'False':
+                    self.led_queue.put(True)
                 continue
             TI.sleep(1e-8)
         # print ("stopped ligger")
@@ -758,11 +762,57 @@ class Ligger(TH.Thread):
         self.running = False
 
 
-    def join(self, *args, **kwargs):
-        # print (self.data_queue)
-        # self.data_queue.join()
-        super(Ligger, self).join(*args, **kwargs)
-        # print ('all done')
+    # def join(self, *args, **kwargs):
+    #     # print (self.data_queue)
+    #     # self.data_queue.join()
+    #     super(Ligger, self).join(*args, **kwargs)
+    #     # print ('all done')
+
+class TroggerLED(TH.Thread):
+    # trigger listener
+
+    def __init__(self, pin, ft_breakout, led_queue, duration = 10):
+
+        self.pin = pin
+        self.ft_breakout = ft_breakout
+        self.led_queue = led_queue
+        self.duration = duration
+
+
+        self.ft_breakout.setup(self.pin, OUT)
+
+        super(TroggerLED, self).__init__()
+    
+
+    def run(self):
+
+        self.running = True
+        while self.running:
+            if not self.data_queue.empty():
+                if self.data_queue.get():
+                    self.Blink()
+            TI.sleep(1e-8)
+        # print ("stopped ligger")
+
+
+    def Blink(self):
+        
+        for _ in range(int(self.duration//1)):
+            # Set pin to a low level so the LED turns off.
+            self.ft_breakout.output(pin_nr, LOW)
+            TI.sleep(.5)
+
+            # Set pin to a high level so the LED turns on.
+            self.ft_breakout.output(pin_nr, HIGH)
+            TI.sleep(.5)
+
+        self.ft_breakout.output(pin_nr, LOW)
+
+    def Stop(self):
+        self.running = False
+
+
+
 
 
 class Shouter(TH.Thread):
@@ -841,6 +891,10 @@ class Trogger(object):
 
         for lpin in self.logged_pins:
             lpin.data_queue.put( "%i;%s;%f" % (lpin.pin_nr, str(lpin.status), TI.time()) )
+
+        self.indicator = TroggerLED(pin = 7, ft_breakout = self.ft_breakout, led_queue = self.archivar.led_queue) 
+        self.indicator.setDaemon(True)
+        self.indicator.start()
 
         EXIT.register(self.Quit)
 
