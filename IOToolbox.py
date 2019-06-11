@@ -1067,6 +1067,12 @@ class MCCDAQ(object):
             if self.range_index >= len(ranges):
                 self.range_index = len(ranges) - 1
 
+
+            trigger_types = self.ai_info.get_trigger_types()
+            # [<TriggerType.POS_EDGE: 1>, <TriggerType.NEG_EDGE: 2>, <TriggerType.HIGH: 4>, <TriggerType.LOW: 8>]
+            self.analog_input.set_trigger(trigger_types[1], 0, 0, 0, 0)
+
+
             # Allocate a buffer to receive the data.
             self.buffer = UL.create_float_buffer(channel_count, samples_per_channel)
 

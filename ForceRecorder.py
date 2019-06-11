@@ -65,7 +65,7 @@ class Sensor(object):
         self.Empty()
 
 
-    def Record(self, rising = True):
+    def Record(self, rising = False):
 
         status = not rising
         while True:
@@ -302,10 +302,12 @@ class ForceRecorder(object):
 
 
     def LaunchPlates(self, daq):
+        # will start up all the input devices
         daq.Record()
 
 
     def Record(self):
+        # will begin recording, waiting for trigger
         print ('\n', '_'*32)
 
         self._threads = [TH.Thread(target = self.LaunchPlates, args = [daq]) for daq in self.daqs.values()]
@@ -409,7 +411,7 @@ plot_splits = { \
 if __name__ == "__main__":
 
 
-    recording_duration = 10 # s
+    recording_duration = 6 # s
     fr = ForceRecorder(   recording_duration = recording_duration \
                         , label = 'goa' \
                         , sampling_rate = 1e3 \
