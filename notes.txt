@@ -1,0 +1,18 @@
+
+force plate arrangement:
+ _______
+|_1_|_3_|
+|_2_|_4_|
+  front
+
+
+height wooden padding 36.6 mm (38.7 with rubber mat)
+
+
+range all 500pC
+
+FP/Sens triggered on falling edge with xray detector cams (foot pre-trigger).
+Cameras triggered by hand trigger.
+
+
+trogger pulldowns are now 47kR
