@@ -397,6 +397,7 @@ all_data_columns = { \
                     , 'blue': list(sorted(IOT.forceplate_settings['dualkistler']['channel_order'])) \
                     , 'green': list(sorted(IOT.forceplate_settings['dualkistler2']['channel_order'])) \
                     }
+
 plot_splits = { \
                       'nxp': [3.5, 6.5] \
                     , 'blue': [8.5] \
