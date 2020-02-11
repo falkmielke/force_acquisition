@@ -39,9 +39,10 @@ logger = logging.getLogger(__name__)
 
 ### MCC DAQ drivers and library
 # follow readme in https://github.com/mccdaq/uldaq
-    # download   $ wget https://github.com/mccdaq/uldaq/releases/download/v1.1.1/libuldaq-1.1.1.tar.bz2
-    # extract    $ tar -xvjf libuldaq-1.1.1.tar.bz2 && cd libuldaq-1.1.1
+    # download   $ wget https://github.com/mccdaq/uldaq/releases/download/v1.1.2/libuldaq-1.1.2.tar.bz2
+    # extract    $ tar -xvjf libuldaq-1.1.2.tar.bz2 && cd libuldaq-1.1.2
     # build      $ ./configure && make -j4 && sudo make install -j4
+    # if "make" fails, you might need to do: ln -s /usr/bin/autom-1.16 /usr/bin/aclocal-1.14 && ln -s /usr/bin/automake-1.16 /usr/bin/automake-1.14
 # pip install uldaq
 
 ### FTDI FT232H breakout drivers and library
@@ -1435,7 +1436,7 @@ class AnalogInput(MCCDAQ):
 ### Force Plate Settings                                                     ###
 ################################################################################
 def AssembleForceplateSettings():
-    forceplate_settings = {'amti': {}, 'joystick': {}, 'kistler': {}, 'dualkistler': {}, 'dualkistler2': {}}
+    forceplate_settings = {'amti': {}, 'joystick': {}, 'kistler': {}, 'dualkistler': {}, 'dualkistler2': {}, 'test': {}}
     ### AMTI
     forceplate_settings['amti']['measures'] \
                     = ['forces', 'moments']
@@ -1553,6 +1554,16 @@ def AssembleForceplateSettings():
     forceplate_settings['joystick']['colors'] \
                     = {'x': (0.2,0.2,0.8), 'y': (0.2,0.8,0.2), 'z': (0.8,0.2,0.2)}
 
+
+    forceplate_settings['test']['channel_order'] \
+                    = ['v'] # channel order on the MCC board
+
+    forceplate_settings['test']['v_range'] \
+                    = 10. # V
+    forceplate_settings['test']['colors'] \
+                    = {'v': (0.2,0.2,0.2)}
+
+
     return forceplate_settings
 
 forceplate_settings = AssembleForceplateSettings()
@@ -1581,7 +1592,8 @@ class Oscilloscope(AnalogInput):
 
         self.fig, self.ax = MPP.subplots(1, 1)
 
-        self.ax.set_ylim(-5., 5.)
+        # self.ax.set_ylim(-.5, .5)
+        self.ax.set_ylim(-10.5, 10.5)
         self.ax.yaxis.tick_right()
         self.ax.yaxis.set_label_position("right")
         self.ax.set_title('press "E" to exit.')
@@ -3290,12 +3302,12 @@ def TestDAQAnalog():
 def TestOscilloscope():
     with Oscilloscope( \
                   sampling_rate = 1e3 \
-                , channel_labels = forceplate_settings['kistler']['channel_order'] \
+                , channel_labels = forceplate_settings['test']['channel_order'] \
                 , scan_frq = 1e6 \
                 ) \
         as osci:
 
-        osci.Show(window = 6)
+        osci.Show(window = 16)
         
 
 
@@ -3532,7 +3544,7 @@ if __name__ == "__main__":
     ### FT232H breakout function
     # TestGPIO(7)
     # TestGPIOInput(5)
-    TestTrogger(pins = [3, 5])
+    # TestTrogger(pins = [3, 5])
 
     # TestSingleNXP()
     # TestMultiplexNXP()
@@ -3544,7 +3556,7 @@ if __name__ == "__main__":
 
     ### Force Plates
     # TestDAQAnalog()
-    # TestOscilloscope()
+    TestOscilloscope()
     # TestForcePlate()
 
     # TestQuickAnalysis()

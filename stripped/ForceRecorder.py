@@ -4,7 +4,7 @@
 ################################################################################
 ### Libraries                                                                ###
 ################################################################################
-import IOToolbox as IOT
+import MCCDAQ as IOT
 # import multiprocessing as MPR
 import time as TI
 import os as OS
@@ -12,6 +12,7 @@ import numpy as NP
 import pandas as PD
 import re as RE
 import threading as TH
+import atexit as EXIT # commands to shut down processes
 from collections import deque as DEQue # double ended queue
 
 import matplotlib as MP # plotting
@@ -19,93 +20,11 @@ import matplotlib.pyplot as MPP # plot control
 
 
 ################################################################################
-### Muted Force Plate                                                        ###
+### Muted output                                                        ###
 ################################################################################
-class SilentForcePlateDAQ(IOT.TriggeredForcePlateDAQ):
-    def StdOut(self, *args, **kwargs):
+
+def Silent(self, *args, **kwargs):
         pass
-
-
-
-################################################################################
-### Sensor Wrapper                                                           ###
-################################################################################
-class Sensor(object):
-
-    def __init__(self, recording_duration = 1., clock_hz = 1.0e6, sr = 10000, trigger_pin = 5):
-
-        self.recording_duration = recording_duration
-        self.clock_hz = clock_hz
-        self.sr = sr
-        self.trigger_pin = trigger_pin
-
-        # find FT232H
-        try:
-            self.serial = IOT.FindDevices()[0]
-        except Exception as e:
-            print ('No breakout found!:\n\t IOT.FindDevices()', e, '\n')
-        
-        # get sensor
-        try:
-            self.ft_breakout = IOT.FT232H( \
-                                  serial = self.serial \
-                                , clock_hz = self.clock_hz \
-                                )
-        except Exception as e:
-            print ('error in FT232H setup:\n\t', e, '\n')
-
-
-
-
-        self.device = IOT.NXP(self.ft_breakout, clock_hz = self.clock_hz) # 0,1,2
-        self.signal = IOT.DeviceBufferLoader( device = self.device, generating_rate = self.sr ) #, max_length = 512 for post trigger
-
-        self.ft_breakout.setup(self.trigger_pin, IOT.IN)
-
-        self.Empty()
-
-
-    def Record(self, rising = False):
-
-        status = not rising
-        while True:
-            new = self.ft_breakout.input(self.trigger_pin)
-            if status == new:
-                TI.sleep(1/self.sr)
-            else:
-                break
-
-
-        self.sync.append([TI.time(), 0])
-        self.signal.Start()
-        
-        TI.sleep(self.recording_duration)
-        self.signal.Stop()
-        self.sync.append([TI.time(), -1])
-        
-
-
-    def RetrieveOutput(self):
-        time, data = self.signal.RetrieveOutput()
-        data = PD.DataFrame(data, index = time, columns = self.device.config['columns'])
-
-        time_out = PD.DataFrame(NP.stack(self.sync, axis = 0), columns = ['time', 'current_scan_count'])
-        return time_out, data
-
-
-
-    def PrepareAnalogAcquisition(self):
-        pass
-
-    def Empty(self):
-        # remove previous data
-        self.sync = []
-        self.data = None
-
-    def Quit(self):
-        self.ft_breakout.close()
-
-
 
 ################################################################################
 ### Force Recorder                                                           ###
@@ -124,49 +43,43 @@ class ForceRecorder(object):
         self._threads = None
 
 
+        EXIT.register(self.Quit)
+
+
         # initialize first DAQ
         self.daqs = {}
         try:
-            daq1 = SilentForcePlateDAQ( \
-                                  fp_type = 'dualkistler' \
+            daq1 = IOT.TriggeredForcePlateDAQ( \
+                                  fp_type = 'joystick' \
                                 , device_nr = 0 \
                                 , pins = {'led': 7} \
                                 , sampling_rate = self.sampling_rate \
                                 , scan_frq = self.scan_frq \
                                 , recording_duration = self.recording_duration \
                                 )
+
+            # mute by overwriting StdOut
+            daq1.StdOut = Silent
+
             self.daqs[daq1.label] = daq1
         except Exception as e:
-            print ('error in DAQ1 setup:\n\t', e, '\n')
+            print ('error in DAQ setup:\n\t', e, '\n')
 
-
-        # initialize second DAQ
+        # initialize camera
         try:
-            daq2 = SilentForcePlateDAQ( \
-                                  fp_type = 'dualkistler2' \
-                                , device_nr = 1 \
-                                , pins = {'led': 7} \
-                                , sampling_rate = self.sampling_rate \
-                                , scan_frq = self.scan_frq \
-                                , recording_duration = self.recording_duration \
-                                )
-            self.daqs[daq2.label] = daq2
-        except Exception as e:
-            print ('error in DAQ2 setup:\n\t', e, '\n')
-
-        # initialize NXP sensor
-        try:
-            self.daqs['nxp'] = Sensor(recording_duration = self.recording_duration, clock_hz = clock_hz)
+            cam1 = IOT.Camera(recording_duration = self.recording_duration, cam_nr = 0, label = 'oCam')
+            cam1.StdOut = Silent
+            self.daqs['cam'] = cam1
 
         except Exception as e:
-            print ('error in sensor setup:\n\t', e, '\n')
+            print ('error in camera setup:\n\t', e, '\n')
 
 
         # prepare auto save
         self.PrepareAutosave()
 
         ### initialize viewer
-        self.device_labels = self.daqs.keys()
+        self.device_labels = [key for key in self.daqs.keys() if key not in ['cam']]
         self.q = DEQue()
 
         self.PreparePlot()
@@ -207,7 +120,10 @@ class ForceRecorder(object):
                             , hspace = 0.10 # row spacing \
                             )
 
-        self.ax_dict = {devlab: axes[nr] for nr, devlab in enumerate(self.device_labels)}
+        if len(self.device_labels) == 1:
+            self.ax_dict = {self.device_labels[0]: axes}
+        else:
+            self.ax_dict = {devlab: axes[nr] for nr, devlab in enumerate(self.device_labels)}
 
         self.RestoreAxes()
         # self.ax.yaxis.tick_right()
@@ -215,7 +131,7 @@ class ForceRecorder(object):
         # self.ax.set_title('press "E" to exit.')
 
         # draw all empty
-        MPP.show(False)
+        # MPP.show()
         MPP.draw()
         self.fig.canvas.draw()
 
@@ -275,11 +191,11 @@ class ForceRecorder(object):
     def PrepareAutosave(self):
         # auto file saving
         self.datetag = TI.strftime('%Y%m%d')
-        self.file_pattern = "data/{date:s}_{label:s}_{daq:s}_rec{nr:03.0f}_{suffix:s}.csv"
+        self.file_pattern = "recordings/{date:s}_{label:s}_{daq:s}_rec{nr:03.0f}_{suffix:s}{extension:s}"
         self.suffix = ''
 
         # check how many previous recordings there were
-        previous_recordings = [file for file in OS.listdir('data') if OS.path.splitext(file)[1] == '.csv']
+        previous_recordings = [file for file in OS.listdir('recordings') if OS.path.splitext(file)[1] == '.csv']
         counts = [0]
         for file in previous_recordings:
             filename = OS.path.splitext(file)[0]
@@ -297,7 +213,7 @@ class ForceRecorder(object):
 
         for daq in self.daqs.values():
             daq.recording_duration = new_duration
-            daq.PrepareAnalogAcquisition()
+            daq.PrepareAcquisition()
 
 
 
@@ -337,15 +253,20 @@ class ForceRecorder(object):
                                                             , daq = daq \
                                                             , nr = self.recording_counter \
                                                             , suffix = suffix \
+                                                            , extension = '' if daq == 'cam' else '.csv' \
                                                             )
 
         for daq, device in self.daqs.items():
             sync, data = device.RetrieveOutput()
-            sync.to_csv(MakeFileName(daq = daq, suffix = 'sync'), sep = ';', index = False)
-            data.to_csv(MakeFileName(daq = daq, suffix = 'force'), sep = ';')
 
-            # send to viewer
-            self.q.append([self.recording_counter, daq, data])
+            if daq == 'cam':
+                NP.savez_compressed(MakeFileName(daq = daq, suffix = 'video'), time = sync, images = data)
+            else:
+                sync.to_csv(MakeFileName(daq = daq, suffix = 'sync'), sep = ';', index = False)
+                data.to_csv(MakeFileName(daq = daq, suffix = 'force'), sep = ';')
+
+                # send to viewer
+                self.q.append([self.recording_counter, daq, data])
 
             device.Empty()
 
@@ -353,11 +274,11 @@ class ForceRecorder(object):
         print('done recording %i! ' % (self.recording_counter), ' '*32)
         self.recording_counter += 1
 
+
     def Stop(self):
 
         for daq, device in self.daqs.items():
-            device.analog_input.scan_stop()
-            device.Quit()
+            device.AbortRecording()
                 
         self.playing = False
         self.fig.close()
@@ -385,6 +306,24 @@ class ForceRecorder(object):
                 self.UpdatePlot()
 
 
+#______________________________________________________________________
+# Destructor
+#______________________________________________________________________
+    def __enter__(self):
+        # required for context management ("with")
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        # exiting when in context manager
+        self.Quit()
+
+    def Quit(self):
+        print()
+        for daq in self.daqs.values():
+            try:
+                daq.Quit()
+            except Exception as e:
+                print (e) 
 
 
 
@@ -392,11 +331,16 @@ class ForceRecorder(object):
 ################################################################################
 ### Data Viewer                                                              ###
 ################################################################################
+# all_data_columns = { \
+#                       'nxp': ['a_x', 'a_y', 'a_z', 'g_x', 'g_y', 'g_z', 'm_x', 'm_y', 'm_z'] \
+#                     , 'blue': list(sorted(IOT.forceplate_settings['dualkistler']['channel_order'])) \
+#                     , 'green': list(sorted(IOT.forceplate_settings['dualkistler2']['channel_order'])) \
+#                     }
 all_data_columns = { \
-                      'nxp': ['a_x', 'a_y', 'a_z', 'g_x', 'g_y', 'g_z', 'm_x', 'm_y', 'm_z'] \
-                    , 'blue': list(sorted(IOT.forceplate_settings['dualkistler']['channel_order'])) \
-                    , 'green': list(sorted(IOT.forceplate_settings['dualkistler2']['channel_order'])) \
+                      'green': list(sorted(IOT.forceplate_settings['joystick']['channel_order'])) \
+                      , 'cam': [] \
                     }
+
 
 plot_splits = { \
                       'nxp': [3.5, 6.5] \
@@ -412,13 +356,11 @@ plot_splits = { \
 if __name__ == "__main__":
 
 
-    recording_duration = 11 # s
-    fr = ForceRecorder(   recording_duration = recording_duration \
+    recording_duration = 3. # s
+    with ForceRecorder(   recording_duration = recording_duration \
                         , label = 'goa' \
                         , sampling_rate = 1e3 \
                         , scan_frq = 1e6 \
-                        , clock_hz = 1.8e6 \
-                        # , viewer = DataViewer(device_labels = ['nxp', 'blue', 'green']) \
-                        )
+                        ) as forcerec:
 
-    fr.Loop()
+        forcerec.Loop()
