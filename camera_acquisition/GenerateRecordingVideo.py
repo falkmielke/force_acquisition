@@ -7,6 +7,7 @@ import sympy as SYM
 import sympy.physics.mechanics as MECH
 
 import matplotlib as MP
+MP.use('TkAgg')
 import matplotlib.pyplot as MPP
 
 
@@ -23,6 +24,7 @@ topmount_padding = (5.+18.2+18.2+2.) # mm
 selected_forceplate = 1
 convert_to_newtons = False
 plot_forcecolumns = ['x', 'y']
+dpi = 100
 
 
 import MCCDAQ as IOT
@@ -375,7 +377,7 @@ def MakeFigure():
     fig = MPP.figure( \
                               figsize = (figwidth, figheight) \
                             , facecolor = None \
-                            , dpi = 300 \
+                            , dpi = dpi \
                             )
     # MPP.ion() # "interactive mode". Might e useful here, but i don't know. Try to turn it off later.
 
@@ -426,12 +428,13 @@ class ShowRecording(dict):
         rec_numbers = list(sorted(rec_files.keys()))
 
         # take last rec if no number provided
-        if rec_nr is None:
-            rec_nr = rec_numbers[-1]
+        self.rec_nr = rec_nr
+        if self.rec_nr is None:
+            self.rec_nr = rec_numbers[-1]
 
         # escape if the rec number was misspecified
-        if rec_nr not in rec_numbers:
-            raise IOError("recording number %i not found." % (rec_nr))
+        if self.rec_nr not in rec_numbers:
+            raise IOError("recording number %i not found." % (self.rec_nr))
 
         self.files = rec_files[rec_nr]
 
@@ -467,9 +470,9 @@ class ShowRecording(dict):
 
         self['sync'] = PD.read_csv(self.files['sync'], sep = ';').set_index('time', inplace = False).astype(int)
         # print (self['sync'])
-        self.start_time = self['sync'].index.values[0]
-        # sync = self['sync'].loc[self['sync']['current_scan_count'].values > 0, :]
-        # _, self.start_time, _, _, _ = STATS.linregress(x = sync.values.ravel(), y = sync.index.values)
+        # self.start_time = self['sync'].index.values[0]
+        sync = self['sync'].loc[self['sync']['current_scan_count'].values > 0, :]
+        _, self.start_time, _, _, _ = STATS.linregress(x = sync.values.ravel(), y = sync.index.values)
         # print (self.start_time)
 
         forces_raw = PD.read_csv(self.files['force'], sep = ';').set_index('time', inplace = False)
@@ -489,19 +492,25 @@ class ShowRecording(dict):
     def LoadVideo(self):
         loaded = NP.load(self.files['video'])
         self['vtime'] = loaded['time'] - self.start_time
-        self['images'] = loaded['images'][:,:, ::-1]
+        self['images'] = loaded['images']
 
         # MPP.imshow(self['images'][:,:,100], cmap = 'gray')
         # MPP.show()
 
-
+    def __len__(self):
+        return len(self['vtime'])
 
     def ComposeShowcase(self):
+
+        # empty frames folder
+        OS.system("rm frames/*")
 
         timeframe = 0.5 # seconds
         print (self['vtime'].shape)
         print (self['images'].shape)
         for frame_nr, t in enumerate(self['vtime']):
+            if (frame_nr % 100) == 0:
+                print('%i/%i'%(frame_nr, len(self)), ' '*20, end = '\r')
 
             ### prepare figure
             fig, (video_ax, force_ax) = MakeFigure()
@@ -542,10 +551,12 @@ class ShowRecording(dict):
 
             force_ax.legend(loc = 3, fontsize = 8, ncol = 3)
 
-            fig.savefig('frames/%i.png' % (frame_nr), dpi = 300, transparent = False)
+            fig.savefig('frames/%05.0f.png' % (frame_nr), dpi = dpi, transparent = False)
 
             MPP.close()
 
+        OS.system("ffmpeg -y -framerate 60 -pattern_type glob -i 'frames/*.png' -c:v libx264 -preset veryfast videos/rec%03.0fx1.mp4" % (self.rec_nr))
+        OS.system("ffmpeg -y -framerate 10 -pattern_type glob -i 'frames/*.png' -c:v libx264 -preset veryfast videos/rec%03.0fx6.mp4" % (self.rec_nr))
 
 
 
@@ -556,3 +567,4 @@ class ShowRecording(dict):
 #######################################################################
 if __name__ == "__main__":
     rec = ShowRecording(rec_nr = 3)
+

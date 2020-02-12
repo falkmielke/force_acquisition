@@ -493,6 +493,7 @@ class AnalogInput(MCCDAQ):
         self.sampling_rate = sampling_rate
         self.recording_duration = recording_duration
         self.scan_frq = scan_frq
+        self._recording = False
 
         # setup for analog input
         self.CountChannels(n_channels, channel_labels)
@@ -508,12 +509,14 @@ class AnalogInput(MCCDAQ):
 
     def Record(self, wait_time = None):
         self.times['start'] = TI.time()
+        self._recording = True
         self.rate = self.analog_input.a_in_scan(**self.recording_settings)
 
         if wait_time is None:
             self.Wait()
         else:
             TI.sleep( wait_time )
+        self._recording = False
 
 
     def Wait(self, verbose = True):
@@ -710,7 +713,7 @@ class Oscilloscope(AnalogInput):
 
     def Exit(self, event):
         if event.key in ['q', 'e', 'escape', '<space>']:
-            self.playing = False
+            self._playing = False
 
     def PreparePlot(self):
 
@@ -749,10 +752,10 @@ class Oscilloscope(AnalogInput):
         #     print (self.GetStatus(), NP.round(TI.time() - t0, 2), 's')
 
         # print ('blub')
-        self.playing = True
+        self._playing = True
         t0 = TI.time()
         dt = TI.time() - t0
-        while self.playing:
+        while self._playing:
             dt = TI.time() - t0
             data = NP.array(self.buffer).reshape([-1,len(self.channel_labels)])
             timer = dt % window
@@ -775,7 +778,7 @@ class Oscilloscope(AnalogInput):
             MPP.pause(1e-3)
 
             # if dt > 5.:
-            #     self.playing = False
+            #     self._playing = False
 
         # stop after a time
         self.analog_input.scan_stop()
@@ -966,6 +969,7 @@ class TriggeredForcePlateDAQ(AnalogInput):
     def TriggeredRecording(self):
 
         # start recording in the background (will wait for trigger)
+        self._armed = True
         self.rate = self.analog_input.a_in_scan(**self.recording_settings)
 
         self.sync.append([TI.time(), -1] )
@@ -974,6 +978,7 @@ class TriggeredForcePlateDAQ(AnalogInput):
         while self.GetDAQStatus()[1].current_scan_count == 0:
             TI.sleep(1/self.scan_frq)
 
+        self._recording = True
         # store start time
         # self.sync.append([TI.time(), -self.GetDAQStatus()[1].current_total_count] )
         # turn LED on
@@ -991,6 +996,8 @@ class TriggeredForcePlateDAQ(AnalogInput):
 
         # store stop time
         self.sync.append([TI.time(), -1] )
+        self._recording = False
+        self._armed = False
         # turn LED off
         self.Indicate(False)
 
@@ -1182,18 +1189,24 @@ def TestMultiDAQ():
 class Camera(object):
     # using the odroid oCam for quick video recording
 
-    def __init__(self, recording_duration = 1., cam_nr = 0, label = 'camera'):
+    def __init__(self, recording_duration = 1., cam_nr = 0, label = 'camera', daq = None):
         self.recording_duration = recording_duration # s
+        self.cam_nr = cam_nr
         self.label = label
-        self.playing = False
+        self.daq = daq
+        self._recording = False
         EXIT.register(self.Quit)
 
-        self.cam = CV.VideoCapture(index = cam_nr)
+        self.cam = CV.VideoCapture(index = self.cam_nr)
         self.StdOut('Camera connected.')
 
         self.PrepareAcquisition()
 
-        
+    def RestartCamera(self):
+        self.cam.release()
+        self.cam = CV.VideoCapture(index = self.cam_nr)
+        self.PrepareAcquisition()
+
 
     def PrepareAcquisition(self):
         self.fps = 60
@@ -1215,25 +1228,49 @@ class Camera(object):
         # remove previous data
         buffer_size = int(self.recording_duration * self.fps * 1.05)
         # print (buffer_size)
-        self.buffer = DEQue( )#maxlen = buffer_size )
+        self.buffer = DEQue( maxlen = buffer_size )
+
+        for _ in range(10):
+            self.cam.grab()
         
+
+    def DAQIsArmed(self):
+        if self.daq is None:
+            return (TI.now() - self.start) <= self.recording_duration
+        else:
+            return self.daq._armed
+
+    def DAQIsRecording(self):
+        if self.daq is None:
+            return True
+        else:
+            return self.daq._recording
+
 
     def Record(self):
         # This should happen in a thread!
+        
+        TI.sleep(0.001) # to make sure daq is armed first
         self.Empty()
-        start = TI.time()
+
+        self.start = TI.time()
         now = TI.time()
-        self.recording = True
+
+        self._recording = True
         self.StdOut('starting!')
-        while now-start <= self.recording_duration:
-            now = TI.time()
-            ret, frame = self.cam.read()
+        while self.DAQIsArmed():
+            if self.DAQIsRecording():
+                now = TI.time()
+                ret, frame = self.cam.read()
 
-            if ret:
-                self.buffer.append((now, frame))
+                if ret:
+                    self.buffer.append((now, frame))
 
-        self.recording = False
-        self.StdOut('done recording %.1f seconds!' % (now-start))
+            TI.sleep(0.001)
+
+        self._recording = False
+        self.StdOut('done recording %.1f seconds!' % (now-self.start))
+
 
     def SampleRecording(self):
         self._thread = TH.Thread(target = self.Record)
@@ -1279,7 +1316,7 @@ class Camera(object):
 
     def Quit(self):
         # safely exit
-        if self.playing:
+        if self._recording:
             self.AbortRecording()
 
         self.cam.release()
@@ -1289,13 +1326,13 @@ class Camera(object):
 
 
 def TestCamera():
-    with Camera(recording_duration = 3., cam_nr = 0) as cam1:
+    with Camera(recording_duration = 1., cam_nr = 0) as cam1:
 
         print ("camera started. Recording!")
         cam1.SampleRecording()
 
         sync, data = cam1.RetrieveOutput()
-        NP.savez_compressed('test', time = sync, images = data)
+        NP.savez('test', time = sync, images = data)
 
 
     print (sync.shape, data.shape)
@@ -1312,11 +1349,11 @@ if __name__ == "__main__":
 
     print ([so for so in UL.ScanOption])
 
-    # TestCamera()
+    TestCamera()
 
     ### MCC USB1608G DAQ function
     # TestMCCPinIn(pin_nr = 3)
-    TestMCCPinOut(pin_nr = 7)
+    # TestMCCPinOut(pin_nr = 7)
 
     ### Force Plates
     # TestDAQAnalog()

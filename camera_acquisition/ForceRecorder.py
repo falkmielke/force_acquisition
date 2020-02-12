@@ -67,7 +67,7 @@ class ForceRecorder(object):
 
         # initialize camera
         try:
-            cam1 = IOT.Camera(recording_duration = self.recording_duration, cam_nr = 0, label = 'oCam')
+            cam1 = IOT.Camera(recording_duration = self.recording_duration, cam_nr = 0, label = 'oCam', daq = daq1)
             cam1.StdOut = Silent
             self.daqs['cam'] = cam1
 
@@ -260,7 +260,8 @@ class ForceRecorder(object):
             sync, data = device.RetrieveOutput()
 
             if daq == 'cam':
-                NP.savez_compressed(MakeFileName(daq = daq, suffix = 'video'), time = sync, images = data)
+                NP.savez(MakeFileName(daq = daq, suffix = 'video'), time = sync, images = data)
+                # NP.savez_compressed(MakeFileName(daq = daq, suffix = 'video'), time = sync, images = data)
             else:
                 sync.to_csv(MakeFileName(daq = daq, suffix = 'sync'), sep = ';', index = False)
                 data.to_csv(MakeFileName(daq = daq, suffix = 'force'), sep = ';')
@@ -273,6 +274,9 @@ class ForceRecorder(object):
         
         print('done recording %i! ' % (self.recording_counter), ' '*32)
         self.recording_counter += 1
+
+        # restart camera
+        self.daqs['cam'].RestartCamera()
 
 
     def Stop(self):
@@ -358,7 +362,7 @@ if __name__ == "__main__":
 
     recording_duration = 3. # s
     with ForceRecorder(   recording_duration = recording_duration \
-                        , label = 'goa' \
+                        , label = 'rat' \
                         , sampling_rate = 1e3 \
                         , scan_frq = 1e6 \
                         ) as forcerec:
