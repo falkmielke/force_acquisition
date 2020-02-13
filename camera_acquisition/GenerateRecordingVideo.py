@@ -24,11 +24,11 @@ topmount_padding = (5.+18.2+18.2+2.) # mm
 selected_forceplate = 1
 convert_to_newtons = False
 plot_forcecolumns = ['x', 'y']
-dpi = 100
+dpi = 300
 
 
-import MCCDAQ as IOT
-aesthetics = IOT.AssembleForceplateSettings()['joystick']
+import DAQToolbox as DAQ
+aesthetics = DAQ.AssembleForceplateSettings()['joystick']
 colors = aesthetics['colors']
 v_range = aesthetics['v_range']
 
@@ -421,7 +421,8 @@ def MakeFigure():
 #######################################################################
 class ShowRecording(dict):
 
-    def __init__(self, rec_nr = None):
+    def __init__(self, rec_nr = None, post_trigger = False):
+        self.post_trigger = post_trigger
 
         # check which recordings are available
         rec_files = self.GetRecordingNumbers()
@@ -473,7 +474,8 @@ class ShowRecording(dict):
         # self.start_time = self['sync'].index.values[0]
         sync = self['sync'].loc[self['sync']['current_scan_count'].values > 0, :]
         _, self.start_time, _, _, _ = STATS.linregress(x = sync.values.ravel(), y = sync.index.values)
-        # print (self.start_time)
+        self.end_time = self['sync'].index.values[-1]
+        # print (self.end_time)
 
         forces_raw = PD.read_csv(self.files['force'], sep = ';').set_index('time', inplace = False)
         # forces_raw.index += self.start_time
@@ -490,9 +492,17 @@ class ShowRecording(dict):
         # print (self['force'])
 
     def LoadVideo(self):
-        loaded = NP.load(self.files['video'])
-        self['vtime'] = loaded['time'] - self.start_time
+        loaded = NP.load(self.files['cam1'])
+        self['vtime'] = loaded['time'] - (self.end_time if self.post_trigger else self.start_time)
+        # print (NP.min(self['force'].index.values), NP.max(self['force'].index.values))
+        # print (self['vtime'])
+
         self['images'] = loaded['images']
+
+        if self.post_trigger:
+            in_time = NP.logical_and(NP.min(self['force'].index.values) < self['vtime'], self['vtime'] < NP.max(self['force'].index.values))
+            self['vtime'] = self['vtime'][in_time]
+            self['images'] = self['images'][:,:,in_time]
 
         # MPP.imshow(self['images'][:,:,100], cmap = 'gray')
         # MPP.show()
@@ -555,8 +565,9 @@ class ShowRecording(dict):
 
             MPP.close()
 
-        OS.system("ffmpeg -y -framerate 60 -pattern_type glob -i 'frames/*.png' -c:v libx264 -preset veryfast videos/rec%03.0fx1.mp4" % (self.rec_nr))
-        OS.system("ffmpeg -y -framerate 10 -pattern_type glob -i 'frames/*.png' -c:v libx264 -preset veryfast videos/rec%03.0fx6.mp4" % (self.rec_nr))
+        # OS.system("ffmpeg -y -framerate 60 -pattern_type glob -i 'frames/*.png' -c:v libx264 -preset veryfast videos/rec%03.0fx1.mp4" % (self.rec_nr))
+        # OS.system("ffmpeg -y -framerate 10 -pattern_type glob -i 'frames/*.png' -c:v libx264 -preset veryfast videos/rec%03.0fx6.mp4" % (self.rec_nr))
+        OS.system("ffmpeg -y -framerate 5 -pattern_type glob -i 'frames/*.png' -c:v libx264 -preset veryfast videos/rec%03.0fx1.mp4" % (self.rec_nr))
 
 
 
@@ -566,5 +577,5 @@ class ShowRecording(dict):
 ### Mission Control                                                 ###
 #######################################################################
 if __name__ == "__main__":
-    rec = ShowRecording(rec_nr = 3)
+    rec = ShowRecording(rec_nr = 4, post_trigger = False)
 

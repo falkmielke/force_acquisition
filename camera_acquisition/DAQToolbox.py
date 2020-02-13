@@ -17,12 +17,13 @@ import atexit as EXIT # commands to shut down processes
 import subprocess as SP
 import threading as TH # threading for trigger
 import queue as QU # data buffer
-from collections import deque as DEQue # double ended queue
+from collections import deque as Deque # double ended queue
 import numpy as NP # numerics
 import pandas as PD # data storage
 import scipy.signal as SIG
 import math as MATH
 import matplotlib as MP # plotting
+MP.use('TkAgg')
 import matplotlib.pyplot as MPP # plot control
 
 
@@ -803,56 +804,64 @@ class Oscilloscope(AnalogInput):
 ################################################################################
 ### Trigger on MCC DAQ Digital I/O                                           ###
 ################################################################################
-class MultiTrigger(object):
-    # a connection to a digital input on a daq device
+class DIOTrigger(object):
+    # a trigger, able to retrieve multiple input pins
 
-    def __init__(self, digital_io, port, pin_nr = [0], rising = True):
+    def __init__(self, digital_io, port, pin_list = [0], rising = True, scan_frq = 1e3):
 
         self.digital_io = digital_io
         self.port = port
-        self.pin_nr = pin_nr
+        self.pin_list = pin_list
         self.rising = rising
+        self.scan_frq = scan_frq
+        self.Clean()
 
-
+    def Clean(self):
+        self.was_triggered = False
+        self.triggered_bit = None
+        self.trigger_time = None
 
     def Read(self):
-        # read out the trigger bit
-        return NP.array([self.digital_io.d_bit_in(self.port, pin) for pin in self.pin_nr], dtype = bool)
+        # read out the trigger bits
+        return NP.array([self.digital_io.d_bit_in(self.port, pin_nr) for pin_nr in self.pin_list], dtype = bool)
 
 
-    def Await(self, scan_frq = 1e3):
+    def Await(self):
         # wait until the trigger bit encounters a rising/falling edge.
 
         ### triggering loop
-        # store previous status
-        previous = self.Read()
-        triggered_bit = None
-        try:
-            # first, wait for baseline condition (FALSE on rising, TRUE on falling edge)
-            if NP.any(previous == self.rising):
-                # wait for a single switch
-                while True:
-                    TI.sleep(1/scan_frq)
-                    current = self.Read()
-                    if NP.any(NP.logical_xor(current, previous)):
-                        previous = current
-                        break
-                    previous = current
+        self.Clean()
+        self._waiting = True # enables external cancellation
 
-            # loop until bit changes
-            while True:
-                TI.sleep(1/scan_frq)
+        # store initial status, then update it constantly
+        previous = self.Read()
+        try:
+            # first, wait for baseline condition (all FALSE on rising / all TRUE on falling edge)
+            while NP.any(previous == self.rising):
                 current = self.Read()
                 if NP.any(NP.logical_xor(current, previous)):
-                    triggered_bit = self.pin_nr[NP.argmax(NP.logical_xor(current, previous))]
+                    previous = current
+                    continue
+                TI.sleep(1/self.scan_frq)
+
+            # loop until bit changes
+            while self._waiting:
+                current = self.Read()
+                t = TI.time()
+                if NP.any(NP.logical_xor(current, previous)):
+                    # trigger received
+                    self.was_triggered = True
+                    self.triggered_bit = self.pin_list[NP.argmax(NP.logical_xor(current, previous))]
+                    self._waiting = False
+                    self.trigger_time = t
                     break
                 previous = current
+                TI.sleep(1/self.scan_frq)
 
         except KeyboardInterrupt as ki:
             raise ki
 
-        # trigger was successful
-        return triggered_bit
+        # return self.triggered_bit
 
 ################################################################################
 ### LED Indicator on MCC DAQ                                                 ###
@@ -948,7 +957,6 @@ class TriggeredForcePlateDAQ(AnalogInput):
     def StdOut(self, *args, **kwargs):
         print(*args, **kwargs)
 
-    
 
 #______________________________________________________________________
 # I/O
@@ -958,13 +966,7 @@ class TriggeredForcePlateDAQ(AnalogInput):
         self.TriggeredRecording()
         self.StdOut('done! ', ' '*20)
 
-        # # store data
-        # times, data = self.RetrieveOutput()
-        # self.store.append([times, data])
 
-    def AbortRecording(self):
-        self.analog_input.scan_stop()
-        self.Quit()
 
     def TriggeredRecording(self):
 
@@ -1035,7 +1037,7 @@ def PlotJoystick(data):
     PolishAx(xy_ax)
 
     xy_ax.set_xlim([NP.min(data.index.values), NP.max(data.index.values)])
-    xy_ax.set_ylim([-forceplate_settings['joystick']['v_range'], forceplate_settings['joystick']['v_range']])
+    # xy_ax.set_ylim([-forceplate_settings['joystick']['v_range'], forceplate_settings['joystick']['v_range']])
     xy_ax.set_xlabel('time (s)')
     xy_ax.set_ylabel('voltage (V)')
     MPP.show()
@@ -1183,6 +1185,229 @@ def TestMultiDAQ():
     # trigger out on pin 3
 
 
+
+################################################################################
+### MCC USB1608G Force Plate                                                 ###
+################################################################################
+
+class PostTriggerDAQ(AnalogInput):
+
+    # record on external trigger
+    recording_mode = UL.ScanOption.CONTINUOUS
+
+#______________________________________________________________________
+# Construction
+#______________________________________________________________________
+    def __init__(self, fp_type, pins, rising = True \
+                , *args, **kwargs):
+        self.fp_type = fp_type
+
+        # indicator and trigger pins
+        self.pins = pins
+        self.is_triggered = False
+        self.has_indicator = False
+        if (self.pins is not None) and (type(self.pins) is dict):
+            self.has_indicator = self.pins.get('led', None) is not None
+
+            self.has_triggerpins = self.pins.get('triggers', None) is not None
+
+        if not self.has_triggerpins:
+            raise IOError("post trigger recordings require a trigger pin!")
+
+        # stores actual data
+        self.Empty()
+
+
+        ## initialize DAQ
+        kwargs['channel_labels'] = forceplate_settings[self.fp_type]['channel_order']
+        super(PostTriggerDAQ, self).__init__(*args, **kwargs)
+
+        self.SetPins()
+
+        ## connect LED
+        if self.has_indicator:
+            self.led = LED(   digital_io = self.digital_io \
+                            , port = self.port \
+                            , pin_nr = self.pins['led']\
+                            )
+        
+        ## connect trigger
+        if self.has_triggerpins:
+            self.trigger = DIOTrigger( \
+                              digital_io = self.digital_io \
+                            , port = self.port \
+                            , pin_list = self.pins['triggers'] \
+                            , rising = rising \
+                            , scan_frq = self.scan_frq \
+                            )
+
+        # store label
+        self.label = instrument_labels[self.daq_device.get_descriptor().unique_id]
+
+
+    def Empty(self):
+        # remove previous data
+        self.sync = []
+        self.data = None
+        
+
+    def SetPins(self):
+        # set led pin to output
+        if self.has_indicator:
+            self.digital_io.d_config_bit(self.port, self.pins['led'], UL.DigitalDirection.OUTPUT)
+
+        # set trigger pin to input
+        if self.has_triggerpins:
+            for pin in self.pins['triggers']:
+                self.digital_io.d_config_bit(self.port, pin, UL.DigitalDirection.INPUT)
+
+
+#______________________________________________________________________
+# Control
+#______________________________________________________________________
+
+    def Indicate(self, value):
+        # flash an LED
+        if not self.has_indicator:
+            return
+
+        self.led.Switch(value)
+
+
+    def AwaitTrigger(self):
+        # initiate trigger thread
+        self._waiting = True
+        self._trig = TH.Thread(target = self.trigger.Await)
+        self._trig.daemon = True
+        self._trig.start()
+        
+
+    def AbortRecording(self):
+        # unexpectedly abort a recording
+        self._end_time = TI.time()
+        try:
+            self.analog_input.scan_stop()
+        except UL.ul_exception.ULException as ule:
+            pass # ignore if the device was closed before
+
+        self.trigger._waiting = False
+        self._trig.join()
+
+
+    def StdOut(self, *args, **kwargs):
+        print(*args, **kwargs)
+
+
+    def Quit(self, *args, **kwargs):
+        self.AbortRecording()
+        super(PostTriggerDAQ, self).Quit(*args, **kwargs)
+    
+
+#______________________________________________________________________
+# Recording Procedure
+#______________________________________________________________________
+    def Record(self):
+        # self.StdOut('waiting for recording... ' , end = '\r')
+        self.TriggeredRecording()
+        self.StdOut('done! ', ' '*20)
+
+
+    def Start(self):
+        # start recording in the background (will wait for trigger)
+        self._armed = True
+        self._recording = True
+        self.StdOut('recording... waiting for trigger.', ' '*20, end = '\r')
+        self._start_time = TI.time()
+        self.rate = self.analog_input.a_in_scan(**self.recording_settings)
+
+        # self.sync.append([TI.time(), -1] )
+        # turn LED on
+        self.Indicate(True)
+        self.AwaitTrigger()
+
+
+    def Stop(self):
+        # stop daq
+        self.analog_input.scan_stop()
+        # stop trigger
+        self.trigger._waiting = False
+
+        # store stop time
+        self._stop_sample = self.GetDAQStatus()[1].current_scan_count
+        # print (self._stop_sample)
+
+        self._end_time = self.trigger.trigger_time
+        self.sync.append([self._end_time, self._stop_sample] )
+
+        # adjust status
+        self._recording = False
+        self._armed = False
+
+        # turn LED off
+        self.Indicate(False)
+
+        # await trigger finish
+        self._trig.join()
+
+
+
+    def TriggeredRecording(self):
+        # start
+        self.Start()
+
+        # wait until recording has ended
+        counter = 0
+        while not self.trigger.was_triggered:
+            if (counter % self.sampling_rate) == 0:
+                self.sync.append([TI.time(), self.GetDAQStatus()[1].current_scan_count] )
+
+            TI.sleep(1/self.scan_frq)
+            counter += 1
+
+        # stop
+        self.Stop()
+
+
+
+#______________________________________________________________________
+# Data reporting
+#______________________________________________________________________
+    def RetrieveOutput(self):
+        # dt = self._end_time - self._start_time
+        data = NP.array(self.buffer).reshape([-1,len(self.channel_labels)])
+        # timer = dt % self.recording_duration
+        # data = NP.roll(data, -int(timer * self.sampling_rate)-1, axis = 0)
+        data = NP.roll(data, -(self._stop_sample % data.shape[0]), axis = 0)
+        time = NP.arange(data.shape[0]) / self.sampling_rate 
+        time -= NP.max(time)
+
+        data = PD.DataFrame(data, columns = self.channel_labels)
+        data.index = time 
+        data.index.name = 'time'
+
+        sync = PD.DataFrame(NP.stack(self.sync, axis = 0), columns = ['time', 'current_scan_count'])
+        # print (sync)
+
+        return sync, data
+
+
+def TestPostTriggerRecording():
+    with PostTriggerDAQ( \
+                          fp_type = 'joystick' \
+                        , pins = {'led': 7, 'triggers': [5]} \
+                        , rising = False \
+                        , sampling_rate = 1e3 \
+                        , recording_duration = 2. \
+                        , channel_labels = forceplate_settings['joystick']['channel_order'] \
+                        , scan_frq = 1e6 \
+                        ) as daq:
+
+        daq.Record()
+        times, data = daq.RetrieveOutput()
+        print (times, data)
+
+    PlotJoystick(data)
+
 ################################################################################
 ### Camera via OpenCV                                                        ###
 ################################################################################
@@ -1211,10 +1436,10 @@ class Camera(object):
     def PrepareAcquisition(self):
         self.fps = 60
 
-        self.cam.set(CV.CAP_PROP_CONVERT_RGB, False)
-        self.cam.set(CV.CAP_PROP_FPS, self.fps) # only relevant if multiple fps supported per mode
-        self.cam.set(CV.CAP_PROP_FRAME_WIDTH, 1280)
-        self.cam.set(CV.CAP_PROP_FRAME_HEIGHT, 720)
+        # self.cam.set(CV.CAP_PROP_CONVERT_RGB, False)
+        # self.cam.set(CV.CAP_PROP_FPS, self.fps) # only relevant if multiple fps supported per mode
+        # self.cam.set(CV.CAP_PROP_FRAME_WIDTH, 1280)
+        # self.cam.set(CV.CAP_PROP_FRAME_HEIGHT, 720)
 
         # clean buffer
         self.Empty()
@@ -1228,7 +1453,7 @@ class Camera(object):
         # remove previous data
         buffer_size = int(self.recording_duration * self.fps * 1.05)
         # print (buffer_size)
-        self.buffer = DEQue( maxlen = buffer_size )
+        self.buffer = Deque( maxlen = buffer_size )
 
         for _ in range(10):
             self.cam.grab()
@@ -1236,7 +1461,7 @@ class Camera(object):
 
     def DAQIsArmed(self):
         if self.daq is None:
-            return (TI.now() - self.start) <= self.recording_duration
+            return (TI.time() - self.start) <= self.recording_duration
         else:
             return self.daq._armed
 
@@ -1346,10 +1571,12 @@ def TestCamera():
 ### Mission Control                                                          ###
 ################################################################################
 if __name__ == "__main__":
+    pass
+    # print ([so for so in UL.ScanOption])
 
-    print ([so for so in UL.ScanOption])
+    # TestCamera()
 
-    TestCamera()
+    # TestPostTriggerRecording()
 
     ### MCC USB1608G DAQ function
     # TestMCCPinIn(pin_nr = 3)

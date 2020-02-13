@@ -4,7 +4,6 @@
 ################################################################################
 ### Libraries                                                                ###
 ################################################################################
-import MCCDAQ as IOT
 # import multiprocessing as MPR
 import time as TI
 import os as OS
@@ -18,6 +17,8 @@ from collections import deque as DEQue # double ended queue
 import matplotlib as MP # plotting
 import matplotlib.pyplot as MPP # plot control
 
+import DAQToolbox as IOT
+
 
 ################################################################################
 ### Muted output                                                        ###
@@ -30,8 +31,9 @@ def Silent(self, *args, **kwargs):
 ### Force Recorder                                                           ###
 ################################################################################
 class ForceRecorder(object):
-    def __init__(self, recording_duration, label = '', sampling_rate = 1e3, scan_frq = 1e6, clock_hz = 1.0e6, viewer = None):
+    def __init__(self, recording_duration, label = '', fp_type = 'joystick', post_trigger = False, sampling_rate = 1e3, scan_frq = 1e6, clock_hz = 1.0e6, viewer = None):
 
+        self.post_trigger = post_trigger
         self.sampling_rate = sampling_rate
         self.scan_frq = scan_frq
         self.recording_duration = recording_duration
@@ -49,14 +51,27 @@ class ForceRecorder(object):
         # initialize first DAQ
         self.daqs = {}
         try:
-            daq1 = IOT.TriggeredForcePlateDAQ( \
-                                  fp_type = 'joystick' \
+            if self.post_trigger:
+                daq1 = IOT.PostTriggerDAQ( \
+                                  fp_type = fp_type \
+                                , device_nr = 0 \
+                                , pins = {'led': 7, 'triggers': [5]} \
+                                , rising = False \
+                                , sampling_rate = self.sampling_rate \
+                                , scan_frq = self.scan_frq \
+                                , recording_duration = self.recording_duration \
+                                )
+            else:
+                # uses the trigger port on the MCC DAQ for highest accuracy
+                daq1 = IOT.TriggeredForcePlateDAQ( \
+                                  fp_type = fp_type \
                                 , device_nr = 0 \
                                 , pins = {'led': 7} \
                                 , sampling_rate = self.sampling_rate \
                                 , scan_frq = self.scan_frq \
                                 , recording_duration = self.recording_duration \
                                 )
+
 
             # mute by overwriting StdOut
             daq1.StdOut = Silent
@@ -67,7 +82,7 @@ class ForceRecorder(object):
 
         # initialize camera
         try:
-            cam1 = IOT.Camera(recording_duration = self.recording_duration, cam_nr = 0, label = 'oCam', daq = daq1)
+            cam1 = IOT.Camera(recording_duration = self.recording_duration, cam_nr = 0, label = 'cam1', daq = daq1)
             cam1.StdOut = Silent
             self.daqs['cam'] = cam1
 
@@ -260,7 +275,7 @@ class ForceRecorder(object):
             sync, data = device.RetrieveOutput()
 
             if daq == 'cam':
-                NP.savez(MakeFileName(daq = daq, suffix = 'video'), time = sync, images = data)
+                NP.savez(MakeFileName(daq = daq, suffix = device.label), time = sync, images = data)
                 # NP.savez_compressed(MakeFileName(daq = daq, suffix = 'video'), time = sync, images = data)
             else:
                 sync.to_csv(MakeFileName(daq = daq, suffix = 'sync'), sep = ';', index = False)
@@ -285,7 +300,7 @@ class ForceRecorder(object):
             device.AbortRecording()
                 
         self.playing = False
-        self.fig.close()
+        MPP.close()
 
 
 
@@ -340,8 +355,9 @@ class ForceRecorder(object):
 #                     , 'blue': list(sorted(IOT.forceplate_settings['dualkistler']['channel_order'])) \
 #                     , 'green': list(sorted(IOT.forceplate_settings['dualkistler2']['channel_order'])) \
 #                     }
+fp_type = 'joystick'
 all_data_columns = { \
-                      'green': list(sorted(IOT.forceplate_settings['joystick']['channel_order'])) \
+                      'green': list(sorted(IOT.forceplate_settings[fp_type]['channel_order'])) \
                       , 'cam': [] \
                     }
 
@@ -360,9 +376,11 @@ plot_splits = { \
 if __name__ == "__main__":
 
 
-    recording_duration = 3. # s
+    recording_duration = 10. # s
     with ForceRecorder(   recording_duration = recording_duration \
                         , label = 'rat' \
+                        , fp_type = fp_type \
+                        , post_trigger = False \
                         , sampling_rate = 1e3 \
                         , scan_frq = 1e6 \
                         ) as forcerec:
