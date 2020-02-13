@@ -19,18 +19,26 @@ SYM.init_printing(use_latex=False)
 #######################################################################
 ### User Settings                                                   ###
 #######################################################################
-plot_forcecolumns = ['x', 'y']
-dpi = 100
-topmount_padding = (5.+18.2+18.2+2.) # mm 
 forceplate_sensitivity = 100
-convert_to_newtons = False
+topmount_padding = (5.+18.2+18.2+2.) # mm 
 selected_forceplate = 1
+convert_to_newtons = False
+dpi = 300
 
+display_columns = { \
+              'forces': ['F_x', 'F_y', 'F_z'] \
+            , 'moments': ['M_x', 'M_y', 'M_z'] \
+          }
+colors = {   'F_x': (0.2,0.2,0.8), 'F_y': (0.2,0.8,0.2), 'F_z': (0.8,0.2,0.2) \
+            , 'M_x': (0.2,0.2,0.8), 'M_y': (0.2,0.8,0.2), 'M_z': (0.8,0.2,0.2) \
+          }
 
-import DAQToolbox as DAQ
-aesthetics = DAQ.AssembleForceplateSettings()['joystick']
-colors = aesthetics['colors']
-v_range = aesthetics['v_range']
+display_columns = { \
+              'forces': ['x'] \
+            , 'moments': ['y'] \
+          }
+colors = { 'x': (0.8,0.8,0.8), 'y': (0.8,0.8,0.8)}
+
 
 
 #######################################################################
@@ -347,10 +355,8 @@ def FullDespine(ax):
     ax.set_yticks([])
 
 
-def MakeFigure():
-    rows = [3,1]
-    cols = [1]
-    dimensions = [16,12]
+def MakeFigure(rows = [1], cols = [1], dimensions = [16,12]):
+    
     style = 'dark_background'
     PreparePlot()
 
@@ -403,13 +409,7 @@ def MakeFigure():
                                 )
 
 
-
-
-    axarr = []
-    axarr.append( fig.add_subplot(gs[0,0], aspect = 'equal') )
-    axarr.append( fig.add_subplot(gs[1,0]) )#, sharex = axarr[0], sharey = axarr[0]) )
-
-    return fig, axarr
+    return fig, gs
 
 
 
@@ -419,10 +419,9 @@ def MakeFigure():
 #######################################################################
 ### Recording                                                       ###
 #######################################################################
-class ShowRecording(dict):
+class ShowForce(dict):
 
-    def __init__(self, rec_nr = None, post_trigger = False):
-        self.post_trigger = post_trigger
+    def __init__(self, rec_nr = None):
 
         # check which recordings are available
         rec_files = self.GetRecordingNumbers()
@@ -440,9 +439,8 @@ class ShowRecording(dict):
         self.files = rec_files[rec_nr]
 
         self.LoadForces()
-        self.LoadVideo()
 
-        self.ComposeShowcase()
+        self.DisplayForce()
 
 
 
@@ -491,84 +489,53 @@ class ShowRecording(dict):
 
         # print (self['force'])
 
-    def LoadVideo(self):
-        loaded = NP.load(self.files['cam1'])
-        self['vtime'] = loaded['time'] - (self.end_time if self.post_trigger else self.start_time)
-        # print (NP.min(self['force'].index.values), NP.max(self['force'].index.values))
-        # print (self['vtime'])
-
-        self['images'] = loaded['images']
-
-        if self.post_trigger:
-            in_time = NP.logical_and(NP.min(self['force'].index.values) < self['vtime'], self['vtime'] < NP.max(self['force'].index.values))
-            self['vtime'] = self['vtime'][in_time]
-            self['images'] = self['images'][:,:,in_time]
-
-        # MPP.imshow(self['images'][:,:,100], cmap = 'gray')
-        # MPP.show()
 
     def __len__(self):
-        return len(self['vtime'])
+        return self['force'].shape[0]
 
-    def ComposeShowcase(self):
+    def DisplayForce(self):
 
-        # empty frames folder
-        OS.system("rm frames/*")
+        fig, gs = MakeFigure(rows = [3,1], cols = [1], dimensions = [24, 18])
 
-        timeframe = 0.5 # seconds
-        print (self['vtime'].shape)
-        print (self['images'].shape)
-        for frame_nr, t in enumerate(self['vtime']):
-            if (frame_nr % 100) == 0:
-                print('%i/%i'%(frame_nr, len(self)), ' '*20, end = '\r')
+        ax = {}
+        ax['forces'] = fig.add_subplot(gs[0])
+        ax['moments'] = fig.add_subplot(gs[1], sharex = ax['forces'])
 
-            ### prepare figure
-            fig, (video_ax, force_ax) = MakeFigure()
+        time = self['force'].index.values
 
-            ### plot the video frame
-            video_ax.imshow(self['images'][:,:,frame_nr], cmap = 'gray')
-            FullDespine(video_ax)
+        for components, columns in display_columns.items():
+            for col in columns:
+                trace = self['force'].loc[:, col].values
+                # trace = self.Filter(trace)
+                
+                ax[components].plot( \
+                                      time \
+                                    , trace \
+                                    , ls = '-' \
+                                    , lw = 1 \
+                                    , color = colors[col] \
+                                    , alpha = 0.8 \
+                                    , label = col \
+                                    )
 
-            ### plot forces
-            # print (t)
-            # print (self['force'].index.values)
-            ftime = self['force'].index.values
-            t0 = t - (timeframe)
-            t1 = t + (timeframe)
-            force_display = NP.logical_and(ftime >= t0, ftime < t1)
-            # print (NP.sum(force_display))
+            PolishAx(ax[components])
 
-            plot_time = ftime[force_display]
+        ax['forces'].set_xlim([NP.min(time), NP.max(time)])        
+        ax['forces'].set_ylabel('voltage' if not (convert_to_newtons) else 'force (N)')
+            
+        ax['moments'].set_xlabel('time (s)')
+        ax['forces'].set_ylabel('voltage' if not (convert_to_newtons) else 'force (N)')
 
-            for col in plot_forcecolumns:
-                if col not in self['force'].columns:
-                    continue
-                plot_data = self['force'].loc[force_display, col]
-                # print (plot_data)
 
-                force_ax.plot(plot_time - t, plot_data.values \
-                            , color = colors[col] \
-                            , ls = '-', lw = 1 \
-                            , label = col \
-                            )
-            force_ax.axvline(0, ls = '-', color = '0.5', alpha = 0.5)
+        MPP.show()
 
-            PolishAx(force_ax)
-            force_ax.set_xlim([-timeframe, +timeframe])
-            force_ax.set_ylim([-v_range, +v_range])
-            force_ax.set_xlabel('time (s)')
-            force_ax.set_ylabel('voltage' if not (convert_to_newtons) else 'force (N)')
 
-            force_ax.legend(loc = 3, fontsize = 8, ncol = 3)
 
-            fig.savefig('frames/%05.0f.png' % (frame_nr), dpi = dpi, transparent = False)
-
-            MPP.close()
-
-        OS.system("ffmpeg -y -framerate 80 -pattern_type glob -i 'frames/*.png' -c:v libx264 -preset veryfast videos/rec%03.0fx1.mp4" % (self.rec_nr))
-        OS.system("ffmpeg -y -framerate 10 -pattern_type glob -i 'frames/*.png' -c:v libx264 -preset veryfast videos/rec%03.0fx8.mp4" % (self.rec_nr))
-        # OS.system("ffmpeg -y -framerate 5 -pattern_type glob -i 'frames/*.png' -c:v libx264 -preset veryfast videos/rec%03.0fx1.mp4" % (self.rec_nr))
-
+    def Filter(self, trace):
+        if True:
+            pass
+        elif True:
+            pass
 
 
 
@@ -577,5 +544,5 @@ class ShowRecording(dict):
 ### Mission Control                                                 ###
 #######################################################################
 if __name__ == "__main__":
-    rec = ShowRecording(rec_nr = 13, post_trigger = True)
+    rec = ShowForce(rec_nr = 13)
 

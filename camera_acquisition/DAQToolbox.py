@@ -1292,6 +1292,7 @@ class PostTriggerDAQ(AnalogInput):
 
         self.trigger._waiting = False
         self._trig.join()
+        self.Indicate(False)
 
 
     def StdOut(self, *args, **kwargs):
@@ -1434,12 +1435,17 @@ class Camera(object):
 
 
     def PrepareAcquisition(self):
-        self.fps = 60
+        self.fps = 80
 
         # self.cam.set(CV.CAP_PROP_CONVERT_RGB, False)
         # self.cam.set(CV.CAP_PROP_FPS, self.fps) # only relevant if multiple fps supported per mode
         # self.cam.set(CV.CAP_PROP_FRAME_WIDTH, 1280)
         # self.cam.set(CV.CAP_PROP_FRAME_HEIGHT, 720)
+
+        self.cam.set(CV.CAP_PROP_CONVERT_RGB, False)
+        self.cam.set(CV.CAP_PROP_FPS, self.fps) # only relevant if multiple fps supported per mode
+        self.cam.set(CV.CAP_PROP_FRAME_WIDTH, 640)
+        self.cam.set(CV.CAP_PROP_FRAME_HEIGHT, 480)
 
         # clean buffer
         self.Empty()

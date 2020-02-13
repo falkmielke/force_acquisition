@@ -378,10 +378,10 @@ if __name__ == "__main__":
 
     recording_duration = 10. # s
     with ForceRecorder(   recording_duration = recording_duration \
-                        , label = 'rat' \
+                        , label = 'test' \
                         , fp_type = fp_type \
-                        , post_trigger = False \
-                        , sampling_rate = 1e3 \
+                        , post_trigger = True \
+                        , sampling_rate = 3.2e4 \
                         , scan_frq = 1e6 \
                         ) as forcerec:
 
