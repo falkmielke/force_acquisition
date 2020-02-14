@@ -360,7 +360,7 @@ class ForceRecorder(object):
 #                     , 'blue': list(sorted(IOT.forceplate_settings['dualkistler']['channel_order'])) \
 #                     , 'green': list(sorted(IOT.forceplate_settings['dualkistler2']['channel_order'])) \
 #                     }
-fp_type = 'joystick'
+fp_type = 'kistler'
 all_data_columns = { \
                       'green': list(sorted(IOT.forceplate_settings[fp_type]['channel_order'])) \
                       , 'cam': [] \
@@ -386,7 +386,7 @@ if __name__ == "__main__":
                         , label = 'test' \
                         , fp_type = fp_type \
                         , post_trigger = True \
-                        , sampling_rate = 3.2e4 \
+                        , sampling_rate = 10.0e3 \
                         , scan_frq = 1e6 \
                         , plot = plotting \
                         ) as forcerec:

@@ -27,10 +27,10 @@ convert_to_newtons = False
 selected_forceplate = 1
 
 
-import DAQToolbox as DAQ
-aesthetics = DAQ.AssembleForceplateSettings()['joystick']
-colors = aesthetics['colors']
-v_range = aesthetics['v_range']
+# import DAQToolbox as DAQ
+# aesthetics = DAQ.AssembleForceplateSettings()['kistler']
+colors = {"Fx": (0.5, 0.5, 0.9), "Fy": (0.5, 0.9, 0.5), "Fz": (0.9, 0.5, 0.5)}#aesthetics['colors']
+v_range = 2#aesthetics['v_range']
 
 
 #######################################################################
@@ -480,6 +480,13 @@ class ShowRecording(dict):
         forces_raw = PD.read_csv(self.files['force'], sep = ';').set_index('time', inplace = False)
         # forces_raw.index += self.start_time
 
+        forces_raw["Fx"] = NP.sum(forces_raw.loc[:, ["Fx12","Fx34"]].values, axis=1).ravel()
+        forces_raw["Fy"] = NP.sum(forces_raw.loc[:, ["Fy14","Fy23"]].values, axis=1).ravel()
+        forces_raw["Fz"] = NP.sum(forces_raw.loc[:, ["Fz1","Fz2","Fz3","Fz4"]].values, axis=1).ravel()
+        
+        for col in ["Fx", "Fy", "Fz"]:
+            forces_raw.loc[:, col] -= NP.mean(forces_raw[col].values)
+
         if convert_to_newtons:
             forceplate_info = LoadCalibrationData().loc[selected_forceplate, :]
             forces_brute = VoltsToNewtons(forces_raw, forceplate_info)
@@ -577,5 +584,5 @@ class ShowRecording(dict):
 ### Mission Control                                                 ###
 #######################################################################
 if __name__ == "__main__":
-    rec = ShowRecording(rec_nr = 13, post_trigger = True)
+    rec = ShowRecording(rec_nr = 1, post_trigger = True)
 
