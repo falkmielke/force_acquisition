@@ -708,7 +708,7 @@ def TestGPIOInput(pin_nr = 3):
         new = ft1.input(pin_nr)
         if status == new:
             TI.sleep(0.000001)
-            if TI.time() - t0 > 10:
+            if TI.time() - t0 > 10.:
                 break
         else:
             status = new
@@ -3540,7 +3540,7 @@ def TestMultiDAQ():
 ### Mission Control                                                          ###
 ################################################################################
 if __name__ == "__main__":
-
+    pass
     ### FT232H breakout function
     # TestGPIO(7)
     # TestGPIOInput(5)
@@ -3556,7 +3556,7 @@ if __name__ == "__main__":
 
     ### Force Plates
     # TestDAQAnalog()
-    TestOscilloscope()
+    # TestOscilloscope()
     # TestForcePlate()
 
     # TestQuickAnalysis()
