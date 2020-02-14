@@ -3,3 +3,7 @@ data*/*
 __pycache__/*
 archive/*
 *_log.txt
+camera_acquisition/frames/*
+camera_acquisition/recordings/*
+camera_acquisition/testrecs/*
+camera_acquisition/videos/*
