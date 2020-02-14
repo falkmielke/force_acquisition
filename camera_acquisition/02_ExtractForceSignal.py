@@ -10,6 +10,7 @@ import matplotlib as MP
 MP.use('TkAgg')
 import matplotlib.pyplot as MPP
 
+import FilterToolbox as FILT
 
 PD.set_option('precision', 5)
 SYM.init_printing(use_latex=False)
@@ -24,6 +25,9 @@ topmount_padding = (5.+18.2+18.2+2.) # mm
 selected_forceplate = 1
 convert_to_newtons = False
 dpi = 300
+filter_choice = {'pre': None, 'post': None} # see FilterToolbox
+
+data_columns = ['fx12', 'fx34', 'fy14', 'fy23', 'fz1', 'fz2', 'fz3', 'fz4']
 
 display_columns = { \
               'forces': ['F_x', 'F_y', 'F_z'] \
@@ -33,11 +37,11 @@ colors = {   'F_x': (0.2,0.2,0.8), 'F_y': (0.2,0.8,0.2), 'F_z': (0.8,0.2,0.2) \
             , 'M_x': (0.2,0.2,0.8), 'M_y': (0.2,0.8,0.2), 'M_z': (0.8,0.2,0.2) \
           }
 
-display_columns = { \
-              'forces': ['x'] \
-            , 'moments': ['y'] \
-          }
-colors = { 'x': (0.8,0.8,0.8), 'y': (0.8,0.8,0.8)}
+# display_columns = { \
+#               'forces': ['x'] \
+#             , 'moments': ['y'] \
+#           }
+# colors = { 'x': (0.8,0.8,0.8), 'y': (0.8,0.8,0.8)}
 
 
 
@@ -247,7 +251,7 @@ def ForceplateFormulae():
 def ConvertForceCoordinates(force_formulae, input_parameters, fp_info, forces_brute):
 
     ### (1) re-organize forces: dict of force plates
-    rawmeasure_labels = ['fx12', 'fx34', 'fy14', 'fy23', 'fz1', 'fz2', 'fz3', 'fz4']
+    rawmeasure_labels = data_columns
     # print (input_parameters)
     print (forces_brute.columns)
 
@@ -478,15 +482,22 @@ class ShowForce(dict):
         forces_raw = PD.read_csv(self.files['force'], sep = ';').set_index('time', inplace = False)
         # forces_raw.index += self.start_time
 
+        ### PRE-FILTER
+        forces_filt = FILT.Filter(forces_raw, filter_choice['pre'])
+        # trace = self.Filter(trace)
+
+
+
         if convert_to_newtons:
             forceplate_info = LoadCalibrationData().loc[selected_forceplate, :]
-            forces_brute = VoltsToNewtons(forces_raw, forceplate_info)
+            forces_brute = VoltsToNewtons(forces_filt, forceplate_info)
             force_formulae, input_parameters = ForceplateFormulae()
             self['force'] = ConvertForceCoordinates(force_formulae, input_parameters, forceplate_info, forces_brute)
         else:
-            self['force'] = forces_raw
+            self['force'] = forces_filt
 
 
+        self['force'] = FILT.Filter(self['force'], filter_choice['post'])
         # print (self['force'])
 
 
@@ -544,5 +555,5 @@ class ShowForce(dict):
 ### Mission Control                                                 ###
 #######################################################################
 if __name__ == "__main__":
-    rec = ShowForce(rec_nr = 13)
+    rec = ShowForce(rec_nr = 111)
 
