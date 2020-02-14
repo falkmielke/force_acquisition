@@ -69,15 +69,21 @@ def _emd_complim(mean_t, pks, trs):
     return mean_t
 
 
-def PlotEMD(signal, time = None, n_components = 5, reco_components = None, stoplim = .001, fill_nan = False):
+def PlotEMD(signal, time = None, n_components = 5, retain_components = None, remove_components = None, title = None, stoplim = .001, fill_nan = False):
 ### EMF
     intr_mode_fcns = EMD(signal, n_components, stoplim, fill_nan)
     if time is None:
         time = NP.linspace(0., 1., len(signal), endpoint = False)
 
+    import matplotlib.pyplot as MPP
     MPP.figure(figsize=(12,12))
+    ref_ax = None
     for i in range(len(intr_mode_fcns)):
-        MPP.subplot(len(intr_mode_fcns),1,i+1)
+        if ref_ax is None:
+            MPP.subplot(len(intr_mode_fcns),1,i+1)
+            ref_ax = MPP.gca()
+        else:
+            MPP.subplot(len(intr_mode_fcns),1,i+1, sharex = ref_ax, sharey = ref_ax)
         MPP.plot(time,signal-NP.nanmean(signal),color='0.6')
         MPP.plot(time,intr_mode_fcns[i],'k')
         MPP.ylabel('IMF '+NP.str(i))
@@ -85,16 +91,29 @@ def PlotEMD(signal, time = None, n_components = 5, reco_components = None, stopl
             MPP.xlabel('Time (s)')
 
     # MPP.ylim([-1000,1000])
+    if title is not None:
+        MPP.gcf().suptitle(title)
+
+    MPP.tight_layout()
     MPP.show()
 
 
-    if reco_components is not None:
-        reconstructed = NP.sum(NP.stack(intr_mode_fcns[reco_components]), axis = 0)
+    if retain_components is not None:
+        reconstructed = NP.sum(NP.stack(intr_mode_fcns[retain_components]), axis = 0)
         MPP.plot(time, signal-NP.nanmean(signal), color='0.6')
         MPP.plot(time, reconstructed-NP.nanmean(reconstructed), color='0.')
 
 
+        if title is not None:
+            MPP.gcf().suptitle(title)
         MPP.show()
 
+    if remove_components is not None:
+        to_remove = NP.sum(NP.stack(intr_mode_fcns[remove_components]), axis = 0)
+        MPP.plot(time, signal, color='0.6')
+        MPP.plot(time, signal - to_remove, color='0.')
 
-    return intr_mode_fcns
+
+        if title is not None:
+            MPP.gcf().suptitle(title)
+        MPP.show()

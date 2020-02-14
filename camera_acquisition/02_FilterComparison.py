@@ -24,20 +24,21 @@ forceplate_sensitivity = 100
 topmount_padding = (5.+18.2+18.2+2.) # mm 
 selected_forceplate = 1
 convert_to_newtons = False
-dpi = 300
-filter_choice = {'pre': None, 'post': None} # see FilterToolbox
+convert_to_cartesian = True
 
-data_columns = ['fx12', 'fx34', 'fy14', 'fy23', 'fz1', 'fz2', 'fz3', 'fz4']
 
-display_columns = { \
-              'forces': ['F_x', 'F_y', 'F_z'] \
-            , 'moments': ['M_x', 'M_y', 'M_z'] \
+
+measured_columns = ['fx12', 'fx34', 'fy14', 'fy23', 'fz1', 'fz2', 'fz3', 'fz4']
+
+show_columns = { \
+              'forces': ['F_{x}', 'F_{y}', 'F_{z}'] \
+            , 'moments': ['M_{x}', 'M_{y}', 'M_{z}'] \
           }
-colors = {   'F_x': (0.2,0.2,0.8), 'F_y': (0.2,0.8,0.2), 'F_z': (0.8,0.2,0.2) \
-            , 'M_x': (0.2,0.2,0.8), 'M_y': (0.2,0.8,0.2), 'M_z': (0.8,0.2,0.2) \
+colors = {   'F_{x}': (0.2,0.2,0.8), 'F_{y}': (0.2,0.8,0.2), 'F_{z}': (0.8,0.2,0.2) \
+            , 'M_{x}': (0.2,0.2,0.8), 'M_{y}': (0.2,0.8,0.2), 'M_{z}': (0.8,0.2,0.2) \
           }
 
-# display_columns = { \
+# show_columns = { \
 #               'forces': ['x'] \
 #             , 'moments': ['y'] \
 #           }
@@ -101,6 +102,7 @@ def VoltsToNewtons(force_raw, forceplate_info):
 
 
 # vector (de)composition helpers
+coordinates = ['x', 'y', 'z']
 VectorComponents = lambda vec, rf: [vec.dot(rf.x), vec.dot(rf.y), vec.dot(rf.z)]
 MakeVector = lambda components, coords, n = 3: sum(NP.multiply(components[:n], coords[:n]))
 ChangeAFrame = lambda vec, rf_old, rf_new: MakeVector(VectorComponents(vec, rf_old), [rf_new.x, rf_new.y, rf_new.z])
@@ -248,17 +250,17 @@ def ForceplateFormulae():
 
 
 
-def ConvertForceCoordinates(force_formulae, input_parameters, fp_info, forces_brute):
+def ConvertForceCoordinates(force_formulae, input_parameters, forceplate_info, forces_brute):
 
     ### (1) re-organize forces: dict of force plates
-    rawmeasure_labels = data_columns
+    rawmeasure_labels = measured_columns.copy()
     # print (input_parameters)
-    print (forces_brute.columns)
+    # print (forces_brute.columns)
 
     measurement = forces_brute.loc[:, [col for col in rawmeasure_labels]]
 
     ### padding is critical. Make sure the sign is correct! (i.e. negative on Kistler)
-    measurement['pad0'] = fp_info['pad0'] + fp_info['padding']
+    measurement['pad0'] = forceplate_info['pad0'] + forceplate_info['padding']
     # print (measurement.head())
 
     rawmeasure_labels.append('pad0')
@@ -320,7 +322,7 @@ the_font = {  \
 
 def PreparePlot():
     # select some default rc parameters
-    # MP.rcParams['text.usetex'] = True
+    MP.rcParams['text.usetex'] = True
     MPP.rc('font',**the_font)
     # Tell Matplotlib how to ask TeX for this font.
     # MP.texmanager.TexManager.font_info['iwona'] = ('iwona', r'\usepackage[light,math]{iwona}')
@@ -387,7 +389,7 @@ def MakeFigure(rows = [1], cols = [1], dimensions = [16,12]):
     fig = MPP.figure( \
                               figsize = (figwidth, figheight) \
                             , facecolor = None \
-                            , dpi = dpi \
+                            , dpi = 300 \
                             )
     # MPP.ion() # "interactive mode". Might e useful here, but i don't know. Try to turn it off later.
 
@@ -396,7 +398,7 @@ def MakeFigure(rows = [1], cols = [1], dimensions = [16,12]):
                               top    = 0.98 \
                             , right  = 0.98 \
                             , bottom = 0.16 \
-                            , left   = 0.10 \
+                            , left   = 0.16 \
                             , wspace = 0.10 # column spacing \
                             , hspace = 0.10 # row spacing \
                             )
@@ -423,7 +425,7 @@ def MakeFigure(rows = [1], cols = [1], dimensions = [16,12]):
 #######################################################################
 ### Recording                                                       ###
 #######################################################################
-class ShowForce(dict):
+class ForceRecording(dict):
 
     def __init__(self, rec_nr = None):
 
@@ -444,9 +446,12 @@ class ShowForce(dict):
 
         self.LoadForces()
 
-        self.DisplayForce()
+    def Copy(self):
+        copy_object = ForceRecording(self.rec_nr)
+        for key in self.keys():
+            copy_object[key] = self[key].copy()
 
-
+        return copy_object
 
     def GetRecordingNumbers(self):
         # list all recordings
@@ -479,81 +484,292 @@ class ShowForce(dict):
         self.end_time = self['sync'].index.values[-1]
         # print (self.end_time)
 
-        forces_raw = PD.read_csv(self.files['force'], sep = ';').set_index('time', inplace = False)
-        # forces_raw.index += self.start_time
-
-        ### PRE-FILTER
-        forces_filt = FILT.Filter(forces_raw, filter_choice['pre'])
-        # trace = self.Filter(trace)
+        self['force'] = PD.read_csv(self.files['force'], sep = ';').set_index('time', inplace = False)
 
 
+        self.forceplate_info = LoadCalibrationData().loc[selected_forceplate, :]
 
+        ### UNIT CONVERSION
         if convert_to_newtons:
-            forceplate_info = LoadCalibrationData().loc[selected_forceplate, :]
-            forces_brute = VoltsToNewtons(forces_filt, forceplate_info)
-            force_formulae, input_parameters = ForceplateFormulae()
-            self['force'] = ConvertForceCoordinates(force_formulae, input_parameters, forceplate_info, forces_brute)
-        else:
-            self['force'] = forces_filt
+            self.ConvertToNewtons()
 
+        if convert_to_cartesian:
+            self.CalculateCartesian()
 
-        self['force'] = FILT.Filter(self['force'], filter_choice['post'])
         # print (self['force'])
+
+
+    def ConvertToNewtons(self):
+        self['force'] = VoltsToNewtons(self['force'], self.forceplate_info)
+
+    def CalculateCartesian(self):
+        force_formulae, input_parameters = ForceplateFormulae()
+        force_cartesian = ConvertForceCoordinates(force_formulae, input_parameters, self.forceplate_info, self['force'].loc[:, measured_columns])
+        for col in force_cartesian.columns:
+            self['force'][col] = force_cartesian[col].values
+
 
 
     def __len__(self):
         return self['force'].shape[0]
 
-    def DisplayForce(self):
 
-        fig, gs = MakeFigure(rows = [3,1], cols = [1], dimensions = [24, 18])
 
-        ax = {}
-        ax['forces'] = fig.add_subplot(gs[0])
-        ax['moments'] = fig.add_subplot(gs[1], sharex = ax['forces'])
+    def ShowData(self, display_columns, rows = None, dimensions = [24, 18], show = False, suffix = '', figax = None, plot_kwargs = None):
+
+        components = [comp for comp in display_columns.keys()]
+
+        if not (figax is None):
+            fig, ax = figax
+            ref_ax = ax[components[0]]
+        else: 
+            if rows is None:
+                rows = [1] * len(components)
+
+            fig, gs = MakeFigure(rows = rows, cols = [1], dimensions = dimensions)
+
+            ax = {}
+            ref_ax = None
+            for nr, comp in enumerate(components):
+                if ref_ax is None:
+                    ax[comp] = fig.add_subplot(gs[nr])
+                    ref_ax = ax[comp]
+                else:
+                    ax[comp] = fig.add_subplot(gs[nr], sharex = ref_ax)
 
         time = self['force'].index.values
 
-        for components, columns in display_columns.items():
-            for col in columns:
+        plotargs = dict(  ls = '-' \
+                        , lw = 1 \
+                        , alpha = 0.6 \
+                        )
+        if plot_kwargs is not None:
+            for arg, setting in plot_kwargs.items():
+                plotargs[arg] = setting
+            
+
+        for comp in components:
+            for col in display_columns[comp]:
                 trace = self['force'].loc[:, col].values
                 # trace = self.Filter(trace)
                 
-                ax[components].plot( \
+                ax[comp].plot( \
                                       time \
                                     , trace \
-                                    , ls = '-' \
-                                    , lw = 1 \
                                     , color = colors[col] \
-                                    , alpha = 0.8 \
-                                    , label = col \
+                                    , label = r"$%s$%s" % (col, ' ' + suffix)  \
+                                    ,**plotargs
                                     )
 
-            PolishAx(ax[components])
+            PolishAx(ax[comp])
+            ax[comp].set_ylabel('voltage' if not (convert_to_newtons) else 'force (N)')
 
-        ax['forces'].set_xlim([NP.min(time), NP.max(time)])        
-        ax['forces'].set_ylabel('voltage' if not (convert_to_newtons) else 'force (N)')
-            
-        ax['moments'].set_xlabel('time (s)')
-        ax['forces'].set_ylabel('voltage' if not (convert_to_newtons) else 'force (N)')
+            if not (comp == components[-1]):
+                # ax[comp].spines['bottom'].set_visible(False)
+                # ax[comp].tick_params(bottom = False)
+                ax[comp].get_xaxis().set_visible(False)
+
+        ref_ax.set_xlim([NP.min(time), NP.max(time)])            
+        ax[components[-1]].set_xlabel('time (s)')
+
+        if figax is None:
+            ax[components[0]].legend(loc = 1, fontsize = 6)
+
+        if show:
+            MPP.show()
+
+        return (fig, ax)
 
 
-        MPP.show()
+    def Baseline(self, interval):
+        # deduce baseline voltage
+        time = self['force'].index.values
+        for col in self['force'].columns:
+            selection = NP.logical_and(time >= interval[0], time < interval[1])
+            self['force'].loc[:, col] -= NP.nanmean(self['force'].loc[selection, col].values)
+
+
+    def Cut(self, interval = None, flipstitch = False, cyclize = False):
+        self['force'] = FILT.Cut(self['force'], interval = interval, flipstitch = flipstitch, cyclize = cyclize)
+
+
+    def ApplyFilter(self, apply_raw = False, filter_choice = None, *filter_args, **filter_kwargs):
+
+        if apply_raw:
+            # pre = self['force'].values
+            self['force'] = FILT.ApplyFilter(self['force'].loc[:, measured_columns], filter_choice = filter_choice, *filter_args, **filter_kwargs)
+            self.CalculateCartesian()
+            # post = self['force'].values
+            # print (self['force'].values)
+            # print (NP.nansum(NP.abs(NP.subtract(post, pre)), axis = (0,1)))
+        else:
+            columns = [col for col in self['force'].columns if col not in measured_columns]
+            self['force'].loc[:, columns] = FILT.ApplyFilter(self['force'].loc[:, columns], filter_choice = filter_choice, *filter_args, **filter_kwargs)
 
 
 
-    def Filter(self, trace):
-        if True:
-            pass
-        elif True:
-            pass
+#######################################################################
+### Filter Procedures                                               ###
+#######################################################################
+def FrequencyFilter(rec_raw):
+### baseline and cutting
+    
+    # rec_raw.Cut(interval = [3.304, 3.710], flipstitch = True)
+    # rec_raw.Cut(interval = [3.2, 3.710], flipstitch = True)
+
+    ## show cutting result
+    # rec_raw.ShowData(display_columns = show_columns, show = True, rows = [3, 1], plot_kwargs = {'ls': '-'})
+    # pause
 
 
+    # backup
+    rec = rec_raw.Copy()
+    figax = rec.ShowData(display_columns = show_columns, rows = [3, 1], plot_kwargs = {'ls': '-'})
+
+### frequency filtering
+    rec.ApplyFilter(apply_raw = False, filter_choice = 'lowpass', lowpass_frequency = 100)
+    rec.ShowData( \
+                  display_columns = show_columns \
+                , figax = figax \
+                , suffix = 'eff' \
+                , plot_kwargs = {'ls': ':'} \
+                )
+
+
+    rec = rec_raw.Copy()
+    rec.ApplyFilter(apply_raw = True, filter_choice = 'lowpass', lowpass_frequency = 100)
+    rec.ShowData( \
+                  display_columns = show_columns \
+                , figax = figax \
+                , suffix = 'raw' \
+                , plot_kwargs = {'ls': '--'} \
+                )
+
+    MPP.gcf().suptitle('Frequency Filter')
+    MPP.show()
+
+
+
+def FSDFilter(rec_raw):
+    rec = rec_raw.Copy()
+### baseline and cutting
+    # interval = None, flipstitch = False, cyclize = False
+    # rec_raw.Cut(interval = [3.304, 3.710], flipstitch = True)
+    rec.Cut(interval = [3.304, 3.710], flipstitch = True, cyclize = True)
+
+    ## show cutting result
+    # rec_raw.ShowData(display_columns = show_columns, show = True, rows = [3, 1], plot_kwargs = {'ls': '-'})
+    # pause
+
+
+    # backup
+    figax = rec.ShowData(display_columns = show_columns, rows = [3, 1], plot_kwargs = {'ls': '-'})
+
+### frequency filtering
+    rec.ApplyFilter(apply_raw = True, filter_choice = 'fsd', filter_order = 11, n_periods = 1)
+    rec.Cut(interval = [0., 3.710], flipstitch = False, cyclize = False)
+    rec.ShowData( \
+                  display_columns = show_columns \
+                , figax = figax \
+                , suffix = 'fsd' \
+                , plot_kwargs = {'ls': '--'} \
+                )
+
+    MPP.gcf().suptitle('FSD Filter')
+    MPP.show()
+
+
+
+def EMDFilter(rec_raw, settings = {}):
+    rec = rec_raw.Copy()
+### baseline and cutting
+    # interval = None, flipstitch = False, cyclize = False
+    # rec_raw.Cut(interval = [3.304, 3.710], flipstitch = True)
+    # rec.Cut(interval = [3.0, 4.0], flipstitch = False, cyclize = False)
+
+    ## show cutting result
+    # rec_raw.ShowData(display_columns = show_columns, show = True, rows = [3, 1], plot_kwargs = {'ls': '-'})
+    # pause
+
+
+    # backup
+    rec_copy = rec.Copy()
+    rec_copy.Cut(interval = [3.0, 4.0], flipstitch = False, cyclize = False)
+    figax = rec_copy.ShowData(display_columns = show_columns, rows = [3, 1], plot_kwargs = {'ls': '-'})
+
+### frequency filtering
+    rec.ApplyFilter(apply_raw = True, filter_choice = 'emd' \
+            , **settings
+            )
+
+    rec.Cut(interval = [3.0, 4.0], flipstitch = False, cyclize = False)
+    rec.ShowData( \
+                  display_columns = show_columns \
+                , figax = figax \
+                , suffix = 'fsd' \
+                , plot_kwargs = {'ls': '--'} \
+                )
+
+    MPP.gcf().suptitle('EMD Filter')
+    MPP.show()
 
 
 #######################################################################
 ### Mission Control                                                 ###
 #######################################################################
 if __name__ == "__main__":
-    rec = ShowForce(rec_nr = 111)
+    rec_raw = ForceRecording(rec_nr = 111)
+    rec_raw.Baseline(interval = [0., 3.])
+    # rec_raw.ShowData(display_columns = show_columns, show = True, rows = [3, 1], plot_kwargs = {'ls': '-'})
 
+
+### (0) baseline and cutting
+    if False:
+        # to test cutting
+        rec = rec_raw.Copy()
+
+        # interval = None, flipstitch = False, cyclize = False
+        rec.Cut(interval = [3.304, 3.710], flipstitch = True)
+        # rec.Cut(interval = [3.2, 3.710], flipstitch = True)
+
+        ## show cutting result
+        rec.ShowData(display_columns = show_columns, show = True, rows = [3, 1], plot_kwargs = {'ls': '-'})
+        # pause
+
+
+## filter parameters:
+    #   lowpass: float lowpass_frequency, int filter_order, int zero_pad
+    #   fsd: int filter_order, int n_periods
+    #   emd: int n_components; list(ints) retain_components; list(ints) remove_components 
+
+### (1) Frequency Filter
+    if False:
+        # ## plot power spectrum
+        # filt = FILT.Filter(rec_raw['force'].copy())
+        # filt.PlotPowerSpectrum('F_{z}', window = 'blackmanharris', nperseg = 300, noverlap = 0.95, scaling='spectrum')
+
+        ## apply frq filter
+        FrequencyFilter(rec_raw)
+
+### (2) Fourier Series Filter
+    if False:
+        FSDFilter(rec_raw)
+
+
+### (3) Empirical Mode Decomposition
+    if True:
+        ## settings
+        n_components = 5
+        settings = dict( n_components = n_components \
+                    # , retain_components = list(NP.arange(n_components)[2:]) \
+                    , remove_components = {'fz1': [0,1], 'fz2': [0,1], 'fz3': [0,1], 'fz4': [0,1]} \
+                    )
+
+        # ## plot emd
+        # filt = FILT.Filter(rec_raw['force'].copy())
+        # filt.PlotEMD( ['fz1', 'fz2', 'fz3', 'fz4'] \
+        #             , **settings \
+        #             )
+
+        ## apply emd filter
+        EMDFilter(rec_raw, settings)

@@ -261,7 +261,6 @@ class MCCDAQ(object):
                 input_mode = UL.AiInputMode.DIFFERENTIAL
 
             # print (dir(UL.AInScanFlag))
-            flags = UL.AInScanFlag.DEFAULT
 
             # Get the number of channels and validate the high channel number.
             number_of_channels = self.ai_info.get_num_chans_by_mode(input_mode)
@@ -284,8 +283,6 @@ class MCCDAQ(object):
             # Allocate a buffer to receive the data.
             self.buffer = UL.create_float_buffer(channel_count, samples_per_channel)
 
-            recording_mode = self.recording_mode
-
             # store settings (keywords for self.analog_input.a_in_scan)
             self.recording_settings = dict( \
                                   low_channel = self.low_channel \
@@ -294,8 +291,8 @@ class MCCDAQ(object):
                                 , analog_range = ranges[self.range_index] \
                                 , samples_per_channel = samples_per_channel \
                                 , rate = self.sampling_rate \
-                                , options = recording_mode \
-                                , flags = flags \
+                                , options = self.recording_mode \
+                                , flags = UL.AInScanFlag.DEFAULT \
                                 , data = self.buffer \
                                 )
 
