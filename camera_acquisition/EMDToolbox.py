@@ -84,8 +84,8 @@ def PlotEMD(signal, time = None, n_components = 5, retain_components = None, rem
             ref_ax = MPP.gca()
         else:
             MPP.subplot(len(intr_mode_fcns),1,i+1, sharex = ref_ax, sharey = ref_ax)
-        MPP.plot(time,signal-NP.nanmean(signal),color='0.6')
-        MPP.plot(time,intr_mode_fcns[i],'k')
+        MPP.plot(time,signal-NP.nanmean(signal), ls = '-', color='0.5', lw = 0.5, alpha = 0.6, zorder = 20)
+        MPP.plot(time,intr_mode_fcns[i], ls = '-', lw = 1., alpha = 0.8, zorder = 10)
         MPP.ylabel('IMF '+NP.str(i))
         if i == len(intr_mode_fcns)-1:
             MPP.xlabel('Time (s)')

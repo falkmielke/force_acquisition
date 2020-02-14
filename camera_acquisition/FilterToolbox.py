@@ -69,19 +69,11 @@ def Cut(data_in, interval = None, flipstitch = False, cyclize = False):
 
 
 #######################################################################
-### Empirical Mode Decomposition                                    ###
+### Gaussian Smoothing                                              ###
 #######################################################################
-def EMDFilter(time, signal, sampling_rate, n_components, retain_components = None, remove_components = None, *args, **kwargs):
-    intr_mode_fcns = EMD.EMD(signal, n_components = n_components, *args, **kwargs) 
-
-    if retain_components is not None:
-        return NP.nansum(NP.stack(intr_mode_fcns[retain_components]), axis = 0)
-
-    if remove_components is not None:
-        return signal - NP.nansum(NP.stack(intr_mode_fcns[remove_components]), axis = 0)
-
-    return signal.copy() # no components removed or retained
-
+def GaussianSmoothing(time, signal, sampling_rate, *args, **kwargs):
+    smoothed_signal = NDI.gaussian_filter1d(signal, *args, **kwargs)
+    return smoothed_signal
 
 
 
@@ -154,6 +146,25 @@ def FourierSeriesFilter(time, signal, sampling_rate, filter_order = 5, n_periods
     return fsd.Reconstruct(x_reco = time_zeroed, period = period)
 
 
+
+
+#######################################################################
+### Empirical Mode Decomposition                                    ###
+#######################################################################
+def EMDFilter(time, signal, sampling_rate, n_components, retain_components = None, remove_components = None, *args, **kwargs):
+    intr_mode_fcns = EMD.EMD(signal, n_components = n_components, *args, **kwargs) 
+
+    if retain_components is not None:
+        return NP.nansum(NP.stack(intr_mode_fcns[retain_components]), axis = 0)
+
+    if remove_components is not None:
+        return signal - NP.nansum(NP.stack(intr_mode_fcns[remove_components]), axis = 0)
+
+    return signal.copy() # no components removed or retained
+
+
+
+
 #######################################################################
 ### Filter Application                                              ###
 #######################################################################
@@ -165,14 +176,17 @@ class Filter(object):
     # a wrapper class to apply filters to a data set
 
     # filter options. 
-    # all functions herein must have the signature Fcn(signal, time, sampling_rate)
+    # all functions herein must have the signature 
     # additional settings:
-    #   lowpass: float Empirical Mode Decomposition ro_pad
+    #   gauss: float sigma
+    #   lowpass: float lowpass_frequency, int filter_order, int zero_pad
     #   fsd: int filter_order, int n_periods
-    #   emd: int n_components; list(ints) retain_components OR list(ints) remove_components 
-    options = {'emd': EMDFilter \
+    #   emd: int n_components; list(ints) retain_components; list(ints) remove_components 
+    options = { \
+                  'gauss': GaussianSmoothing \
                 , 'lowpass': ButterworthLowpass \
                 , 'fsd': FourierSeriesFilter \
+                , 'emd': EMDFilter \
                 } 
 
 
@@ -235,7 +249,7 @@ class Filter(object):
                 if settings.get(key, None) is not None:
                     sub_settings[key] = settings.get(key).get(col, None)
 
-            EMD.PlotEMD(self._data[col].values, time = self._time, title = col, **sub_settings)
+            EMD.PlotEMD(self._data[col].values, time = self._time, title = r"$%s$" % (col), **sub_settings)
             
 
 
@@ -250,9 +264,3 @@ def ApplyFilter(data_in, sampling_rate = None, filter_choice = None, *filter_arg
     return data_filtered 
 
 
-
-#######################################################################
-### Mission Control                                                 ###
-#######################################################################
-if __name__ == "__main__":
-    pass
