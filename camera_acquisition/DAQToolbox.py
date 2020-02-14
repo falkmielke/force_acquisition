@@ -22,9 +22,9 @@ import numpy as NP # numerics
 import pandas as PD # data storage
 import scipy.signal as SIG
 import math as MATH
-import matplotlib as MP # plotting
-MP.use('TkAgg')
-import matplotlib.pyplot as MPP # plot control
+# import matplotlib as MP # plotting
+# MP.use('TkAgg')
+# import matplotlib.pyplot as MPP # plot control
 
 
 import uldaq as UL # MCC DAQ negotiation

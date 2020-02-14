@@ -14,8 +14,10 @@ import threading as TH
 import atexit as EXIT # commands to shut down processes
 from collections import deque as DEQue # double ended queue
 
-import matplotlib as MP # plotting
-import matplotlib.pyplot as MPP # plot control
+plotting = False
+if plotting:
+    import matplotlib as MP # plotting
+    import matplotlib.pyplot as MPP # plot control
 
 import DAQToolbox as IOT
 
@@ -31,15 +33,14 @@ def Silent(self, *args, **kwargs):
 ### Force Recorder                                                           ###
 ################################################################################
 class ForceRecorder(object):
-    def __init__(self, recording_duration, label = '', fp_type = 'joystick', post_trigger = False, sampling_rate = 1e3, scan_frq = 1e6, clock_hz = 1.0e6, viewer = None):
+    def __init__(self, recording_duration, label = '', fp_type = 'joystick', post_trigger = False, sampling_rate = 1e3, scan_frq = 1e6, plot = False):
 
         self.post_trigger = post_trigger
         self.sampling_rate = sampling_rate
         self.scan_frq = scan_frq
         self.recording_duration = recording_duration
         self.label = label
-        
-        self.viewer = viewer
+        self.plot = plot # whether or not to show the result in a MPL figure
 
 
         self._threads = None
@@ -94,10 +95,11 @@ class ForceRecorder(object):
         self.PrepareAutosave()
 
         ### initialize viewer
-        self.device_labels = [key for key in self.daqs.keys() if key not in ['cam']]
-        self.q = DEQue()
+        if self.plot:
+            self.device_labels = [key for key in self.daqs.keys() if key not in ['cam']]
+            self.q = DEQue()
 
-        self.PreparePlot()
+            self.PreparePlot()
 
 
 
@@ -167,38 +169,38 @@ class ForceRecorder(object):
 
     def UpdatePlot(self):
 
-            rec_nr, daq, data = self.q.popleft()
+        rec_nr, daq, data = self.q.popleft()
 
-            # restore background
-            # self.fig.canvas.restore_region(self.plot_backgrounds[daq])
-            self.RestoreAxes()
+        # restore background
+        # self.fig.canvas.restore_region(self.plot_backgrounds[daq])
+        self.RestoreAxes()
 
-            # self.fig.suptitle("recording %i" % (rec_nr))
+        # self.fig.suptitle("recording %i" % (rec_nr))
 
-            # adjust and redraw data
-            y_ticks = []
-            for col in data.columns:
-
-
-                t = NP.linspace(0, self.recording_duration, data.shape[0], endpoint = False)
-                y = NP.array(data[col].values, dtype = float)
-                
-                # normalize
-                y -= y[0]
-                y /= (NP.max(y)-NP.min(y)+1e-3)/2
-
-                # shift
-                offset = len(all_data_columns[daq])-all_data_columns[daq].index(col)
-                y += offset
-
-                self.handles[col].set_data(t, y) # plot one less to avoid flickering
-                self.ax_dict[daq].draw_artist(self.handles[col])
+        # adjust and redraw data
+        y_ticks = []
+        for col in data.columns:
 
 
+            t = NP.linspace(0, self.recording_duration, data.shape[0], endpoint = False)
+            y = NP.array(data[col].values, dtype = float)
+            
+            # normalize
+            y -= y[0]
+            y /= (NP.max(y)-NP.min(y)+1e-3)/2
+
+            # shift
+            offset = len(all_data_columns[daq])-all_data_columns[daq].index(col)
+            y += offset
+
+            self.handles[col].set_data(t, y) # plot one less to avoid flickering
+            self.ax_dict[daq].draw_artist(self.handles[col])
 
 
-            self.ax_dict[daq].set_title("recording %i" % (rec_nr))
-            self.fig.canvas.blit(self.ax_dict[daq].bbox)
+
+
+        self.ax_dict[daq].set_title("recording %i" % (rec_nr))
+        self.fig.canvas.blit(self.ax_dict[daq].bbox)
 
 
 
@@ -282,7 +284,8 @@ class ForceRecorder(object):
                 data.to_csv(MakeFileName(daq = daq, suffix = 'force'), sep = ';')
 
                 # send to viewer
-                self.q.append([self.recording_counter, daq, data])
+                if self.plot:
+                    self.q.append([self.recording_counter, daq, data])
 
             device.Empty()
 
@@ -300,7 +303,8 @@ class ForceRecorder(object):
             device.AbortRecording()
                 
         self.playing = False
-        MPP.close()
+        if self.plot:
+            MPP.close()
 
 
 
@@ -320,9 +324,10 @@ class ForceRecorder(object):
 
 
             # TI.sleep(1)
-            MPP.pause(1.e0)
-            while (len(self.q) > 0):
-                self.UpdatePlot()
+            if self.plot:
+                MPP.pause(1.e0)
+                while (len(self.q) > 0):
+                    self.UpdatePlot()
 
 
 #______________________________________________________________________
@@ -383,6 +388,7 @@ if __name__ == "__main__":
                         , post_trigger = True \
                         , sampling_rate = 3.2e4 \
                         , scan_frq = 1e6 \
+                        , plot = plotting \
                         ) as forcerec:
 
         forcerec.Loop()
