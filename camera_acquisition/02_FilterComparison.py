@@ -21,7 +21,7 @@ SYM.init_printing(use_latex=False)
 ### User Settings                                                   ###
 #######################################################################
 forceplate_sensitivity = 100
-topmount_padding = (5.+18.2+18.2+2.) # mm 
+topmount_padding = (34.9) # mm 
 selected_forceplate = 1
 convert_to_newtons = True
 convert_to_cartesian = True
@@ -745,9 +745,10 @@ def UniformPlot(rec_raw, rec_pre, rec_post, title = None):
 ### Mission Control                                                 ###
 #######################################################################
 if __name__ == "__main__":
-    rec_raw = ForceRecording(rec_nr = 111)
-    rec_raw.Baseline(interval = [0., 3.])
-    # rec_raw.ShowData(display_columns = show_columns, show = True, rows = [3, 1], plot_kwargs = {'ls': '-', 'lw': 0.5, 'alpha': 0.6, 'zorder': 10})
+    # rec_raw = ForceRecording(rec_nr = 111)
+    rec_raw = ForceRecording(rec_nr = 2)
+    rec_raw.Baseline(interval = [0., 1.])
+    rec_raw.ShowData(display_columns = show_columns, show = True, rows = [3, 1], plot_kwargs = {'ls': '-', 'lw': 0.5, 'alpha': 0.6, 'zorder': 10})
 
 
 ### (0) baseline and cutting

@@ -22,8 +22,8 @@ SYM.init_printing(use_latex=False)
 #######################################################################
 measured_columns = ['Fx12', 'Fx34', 'Fy14', 'Fy23', 'Fz1', 'Fz2', 'Fz3', 'Fz4']
 plot_columns = ["F_{x}", "F_{y}", "F_{z}"]
-dpi = 300
-topmount_padding = (5.+12.) # mm 
+dpi = 100
+topmount_padding = (34.9) # mm 
 forceplate_sensitivity = 100
 convert_to_newtons = True
 selected_forceplate = 1
@@ -32,7 +32,7 @@ selected_forceplate = 1
 # import DAQToolbox as DAQ
 # aesthetics = DAQ.AssembleForceplateSettings()['kistler']
 colors = {"F_{x}": (0.5, 0.5, 0.9), "F_{y}": (0.5, 0.9, 0.5), "F_{z}": (0.9, 0.5, 0.5)}#aesthetics['colors']
-# v_range = 10#aesthetics['v_range']
+v_range = 0.5#aesthetics['v_range']
 baseline = [0., 1.]
 
 
@@ -565,7 +565,7 @@ class ShowRecording(dict):
 
             PolishAx(force_ax)
             force_ax.set_xlim([-timeframe, +timeframe])
-            y_limit = NP.max(NP.abs(self['force'].loc[:, plot_columns].values), axis = (0,1))/2
+            y_limit = v_range # NP5max(NP.abs(self['force'].loc[:, plot_columns].values), axis = (0,1))/2
             force_ax.set_ylim([-y_limit, +y_limit])
             force_ax.set_xlabel('time (s)')
             force_ax.set_ylabel('voltage' if not (convert_to_newtons) else 'force (N)')
@@ -588,5 +588,5 @@ class ShowRecording(dict):
 ### Mission Control                                                 ###
 #######################################################################
 if __name__ == "__main__":
-    rec = ShowRecording(rec_nr = 1, post_trigger = True)
+    rec = ShowRecording(rec_nr = 3, post_trigger = True)
 

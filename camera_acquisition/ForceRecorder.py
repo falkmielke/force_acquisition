@@ -381,12 +381,12 @@ plot_splits = { \
 if __name__ == "__main__":
 
 
-    recording_duration = 10. # s
+    recording_duration = 12. # s
     with ForceRecorder(   recording_duration = recording_duration \
-                        , label = 'test' \
+                        , label = 'jp' \
                         , fp_type = fp_type \
                         , post_trigger = True \
-                        , sampling_rate = 10.0e3 \
+                        , sampling_rate = 12.0e3 \
                         , scan_frq = 1e6 \
                         , plot = plotting \
                         ) as forcerec:
