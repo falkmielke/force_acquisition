@@ -10,6 +10,7 @@ import matplotlib as MP
 MP.use('TkAgg')
 import matplotlib.pyplot as MPP
 
+plot_latex = True
 
 PD.set_option('precision', 5)
 SYM.init_printing(use_latex=False)
@@ -19,18 +20,20 @@ SYM.init_printing(use_latex=False)
 #######################################################################
 ### User Settings                                                   ###
 #######################################################################
-plot_forcecolumns = ['x', 'y']
-dpi = 100
-topmount_padding = (5.+18.2+18.2+2.) # mm 
+measured_columns = ['Fx12', 'Fx34', 'Fy14', 'Fy23', 'Fz1', 'Fz2', 'Fz3', 'Fz4']
+plot_columns = ["F_{x}", "F_{y}", "F_{z}"]
+dpi = 300
+topmount_padding = (5.+12.) # mm 
 forceplate_sensitivity = 100
-convert_to_newtons = False
+convert_to_newtons = True
 selected_forceplate = 1
 
 
 # import DAQToolbox as DAQ
 # aesthetics = DAQ.AssembleForceplateSettings()['kistler']
-colors = {"Fx": (0.5, 0.5, 0.9), "Fy": (0.5, 0.9, 0.5), "Fz": (0.9, 0.5, 0.5)}#aesthetics['colors']
-v_range = 2#aesthetics['v_range']
+colors = {"F_{x}": (0.5, 0.5, 0.9), "F_{y}": (0.5, 0.9, 0.5), "F_{z}": (0.9, 0.5, 0.5)}#aesthetics['colors']
+# v_range = 10#aesthetics['v_range']
+baseline = [0., 1.]
 
 
 #######################################################################
@@ -89,6 +92,7 @@ def VoltsToNewtons(force_raw, forceplate_info):
 
 
 # vector (de)composition helpers
+coordinates = ['x', 'y', 'z']
 VectorComponents = lambda vec, rf: [vec.dot(rf.x), vec.dot(rf.y), vec.dot(rf.z)]
 MakeVector = lambda components, coords, n = 3: sum(NP.multiply(components[:n], coords[:n]))
 ChangeAFrame = lambda vec, rf_old, rf_new: MakeVector(VectorComponents(vec, rf_old), [rf_new.x, rf_new.y, rf_new.z])
@@ -239,9 +243,9 @@ def ForceplateFormulae():
 def ConvertForceCoordinates(force_formulae, input_parameters, fp_info, forces_brute):
 
     ### (1) re-organize forces: dict of force plates
-    rawmeasure_labels = ['fx12', 'fx34', 'fy14', 'fy23', 'fz1', 'fz2', 'fz3', 'fz4']
+    rawmeasure_labels = measured_columns.copy()
     # print (input_parameters)
-    print (forces_brute.columns)
+    # print (forces_brute.columns)
 
     measurement = forces_brute.loc[:, [col for col in rawmeasure_labels]]
 
@@ -269,7 +273,7 @@ def ConvertForceCoordinates(force_formulae, input_parameters, fp_info, forces_br
 
     ### (3) transform to world coordinate system
     for coord in coordinates:
-        if coord in forceplate_info['inversion']:
+        if coord in fp_info['inversion']:
             coordinate_columns = [col for col in forces.columns if '{%s}' % (coord) in col]
             forces.loc[:, coordinate_columns] *= -1
 
@@ -284,8 +288,8 @@ def ConvertForceCoordinates(force_formulae, input_parameters, fp_info, forces_br
     # forces.loc[mask, 'p_{y}'] = NP.nan
 
     # shift to world coordinates
-    forces.loc[:, 'p_{x}'] += forceplate_info['center_x']
-    forces.loc[:, 'p_{y}'] += forceplate_info['center_y']
+    forces.loc[:, 'p_{x}'] += fp_info['center_x']
+    forces.loc[:, 'p_{y}'] += fp_info['center_y']
 
     return forces
 
@@ -308,16 +312,17 @@ the_font = {  \
 
 def PreparePlot():
     # select some default rc parameters
-    # MP.rcParams['text.usetex'] = True
     MPP.rc('font',**the_font)
     # Tell Matplotlib how to ask TeX for this font.
     # MP.texmanager.TexManager.font_info['iwona'] = ('iwona', r'\usepackage[light,math]{iwona}')
 
-    # MP.rcParams['text.latex.preamble'] = [\
-    #               r'\usepackage{upgreek}'
-    #             , r'\usepackage{cmbright}'
-    #             , r'\usepackage{sansmath}'
-    #             ]
+    if plot_latex:
+        MP.rcParams['text.usetex'] = True
+        MP.rcParams['text.latex.preamble'] = [\
+                      r'\usepackage{upgreek}'
+                    , r'\usepackage{cmbright}'
+                    , r'\usepackage{sansmath}'
+                    ]
 
     MP.rcParams['pdf.fonttype'] = 42 # will make output TrueType (whatever that means)
 
@@ -480,12 +485,6 @@ class ShowRecording(dict):
         forces_raw = PD.read_csv(self.files['force'], sep = ';').set_index('time', inplace = False)
         # forces_raw.index += self.start_time
 
-        forces_raw["Fx"] = NP.sum(forces_raw.loc[:, ["Fx12","Fx34"]].values, axis=1).ravel()
-        forces_raw["Fy"] = NP.sum(forces_raw.loc[:, ["Fy14","Fy23"]].values, axis=1).ravel()
-        forces_raw["Fz"] = NP.sum(forces_raw.loc[:, ["Fz1","Fz2","Fz3","Fz4"]].values, axis=1).ravel()
-        
-        for col in ["Fx", "Fy", "Fz"]:
-            forces_raw.loc[:, col] -= NP.mean(forces_raw[col].values)
 
         if convert_to_newtons:
             forceplate_info = LoadCalibrationData().loc[selected_forceplate, :]
@@ -495,6 +494,10 @@ class ShowRecording(dict):
         else:
             self['force'] = forces_raw
 
+        ### subtract baseline
+        baseline_time = NP.logical_and(self['force'].index.values >= baseline[0], self['force'].index.values < baseline[1])
+        for col in plot_columns:
+            self['force'].loc[:, col] -= NP.mean(self['force'].loc[baseline_time, col].values)
 
         # print (self['force'])
 
@@ -547,7 +550,7 @@ class ShowRecording(dict):
 
             plot_time = ftime[force_display]
 
-            for col in plot_forcecolumns:
+            for col in plot_columns:
                 if col not in self['force'].columns:
                     continue
                 plot_data = self['force'].loc[force_display, col]
@@ -556,13 +559,14 @@ class ShowRecording(dict):
                 force_ax.plot(plot_time - t, plot_data.values \
                             , color = colors[col] \
                             , ls = '-', lw = 1 \
-                            , label = col \
+                            , label = r"$%s$" % (col) if plot_latex else col \
                             )
             force_ax.axvline(0, ls = '-', color = '0.5', alpha = 0.5)
 
             PolishAx(force_ax)
             force_ax.set_xlim([-timeframe, +timeframe])
-            force_ax.set_ylim([-v_range, +v_range])
+            y_limit = NP.max(NP.abs(self['force'].loc[:, plot_columns].values), axis = (0,1))/2
+            force_ax.set_ylim([-y_limit, +y_limit])
             force_ax.set_xlabel('time (s)')
             force_ax.set_ylabel('voltage' if not (convert_to_newtons) else 'force (N)')
 
