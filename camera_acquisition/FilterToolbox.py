@@ -223,7 +223,6 @@ class Filter(object):
                     if settings.get(key, None) is not None:
                         settings[key] = settings.get(key).get(col, None)
 
-
             self._data.loc[:, col] = FilterFunction( \
                                           self._time \
                                         , self._data[col].values \

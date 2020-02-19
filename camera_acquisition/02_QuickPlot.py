@@ -17,6 +17,7 @@ SYM.init_printing(use_latex=False)
 
 
 
+
 #######################################################################
 ### Force Plate Calibration Parameters                              ###
 #######################################################################
@@ -398,22 +399,12 @@ def MakeFigure(rows = [1], cols = [1], dimensions = [16,12]):
 #######################################################################
 class ForceRecording(dict):
 
-    def __init__(self, rec_nr = None):
+    def __init__(self, file = None):
 
-        # check which recordings are available
-        rec_files = self.GetRecordingNumbers()
-        rec_numbers = list(sorted(rec_files.keys()))
+        if file is None:
+            raise IOError("no file given")
 
-        # take last rec if no number provided
-        self.rec_nr = rec_nr
-        if self.rec_nr is None:
-            self.rec_nr = rec_numbers[-1]
-
-        # escape if the rec number was misspecified
-        if self.rec_nr not in rec_numbers:
-            raise IOError("recording number %i not found." % (self.rec_nr))
-
-        self.files = rec_files[rec_nr]
+        self.files = {'force': file}
 
         self.LoadForces()
 
@@ -424,36 +415,10 @@ class ForceRecording(dict):
 
         return copy_object
 
-    def GetRecordingNumbers(self):
-        # list all recordings
-        basedir = 'recordings'
-        previous_recordings = [file for file in OS.listdir(basedir)]
-        rec_files = {}
-        for file in previous_recordings:
-            filename = OS.path.splitext(file)[0]
-            found = RE.findall(r"(?<=_rec)\d*_", filename) # find file name patterns of the type "*recXXX_*"
-            # print (filename, found)
-            if not (len(found) == 0):
-                rec_nr = int(found[0][:-1])
-                if rec_files.get(rec_nr, None) is None:
-                    rec_files[rec_nr] = {}
-                rec_files[rec_nr][filename.split('_')[-1]] = "/".join([basedir, file])
-        
-        # print (rec_files)
-        return rec_files
-
 
     def LoadForces(self):
 
         # print (forceplate_info)
-
-        self['sync'] = PD.read_csv(self.files['sync'], sep = ';').set_index('time', inplace = False).astype(int)
-        # print (self['sync'])
-        # self.start_time = self['sync'].index.values[0]
-        sync = self['sync'].loc[self['sync']['current_scan_count'].values > 0, :]
-        _, self.start_time, _, _, _ = STATS.linregress(x = sync.values.ravel(), y = sync.index.values)
-        self.end_time = self['sync'].index.values[-1]
-        # print (self.end_time)
 
         self['force'] = PD.read_csv(self.files['force'], sep = ';').set_index('time', inplace = False)
 
@@ -564,154 +529,6 @@ class ForceRecording(dict):
         self['force'] = FILT.Cut(self['force'], interval = interval, flipstitch = flipstitch, cyclize = cyclize)
 
 
-    def ApplyFilter(self, apply_raw = False, filter_choice = None, *filter_args, **filter_kwargs):
-
-        if apply_raw:
-            # pre = self['force'].values
-            self['force'] = FILT.ApplyFilter(self['force'].loc[:, measured_columns], filter_choice = filter_choice, *filter_args, **filter_kwargs)
-            self.CalculateCartesian()
-            # post = self['force'].values
-            # print (self['force'].values)
-            # print (NP.nansum(NP.abs(NP.subtract(post, pre)), axis = (0,1)))
-        else:
-            columns = [col for col in self['force'].columns if col not in measured_columns]
-            self['force'].loc[:, columns] = FILT.ApplyFilter(self['force'].loc[:, columns], filter_choice = filter_choice, *filter_args, **filter_kwargs)
-
-
-
-#######################################################################
-### Filter Procedures                                               ###
-#######################################################################
-def Smoothing(rec_raw):
-    rec_raw = rec_raw.Copy()
-
-### baseline and cutting
-    # interval = None, flipstitch = False, cyclize = False
-    # rec_raw.Cut(interval = [3.304, 3.710], flipstitch = True)
-
-### frequency filtering
-    sigma = 5.
-    rec_smooth_pre = rec_raw.Copy()
-    rec_smooth_pre.ApplyFilter(apply_raw = True, filter_choice = 'gauss', sigma = sigma)
-
-    rec_smooth_post = rec_raw.Copy()
-    rec_smooth_post.ApplyFilter(apply_raw = False, filter_choice = 'gauss', sigma = sigma)
-    
-### cut again and plot
-    UniformPlot(rec_raw, rec_smooth_pre, rec_smooth_post, title = 'Gaussian Smoothing (sigma = %.1f)' % (sigma))
-
-
-
-
-
-def FrequencyFilter(rec_raw):
-
-    rec_raw = rec_raw.Copy()
-
-### baseline and cutting
-    # interval = None, flipstitch = False, cyclize = False
-    # rec_raw.Cut(interval = [3.304, 3.710], flipstitch = True)
-
-### frequency filtering
-    lowpass_frequency = 100
-    rec_buttered_pre = rec_raw.Copy()
-    rec_buttered_pre.ApplyFilter(apply_raw = True, filter_choice = 'lowpass', lowpass_frequency = lowpass_frequency)
-
-    rec_buttered_post = rec_raw.Copy()
-    rec_buttered_post.ApplyFilter(apply_raw = False, filter_choice = 'lowpass', lowpass_frequency = lowpass_frequency)
-    
-### cut again and plot
-    UniformPlot(rec_raw, rec_buttered_pre, rec_buttered_post, title = 'Frequency Filter (%i Hz lowpass)' % (lowpass_frequency))
-
-
-
-def FSDFilter(rec_raw):
-
-    rec_raw = rec_raw.Copy()
-
-### baseline and cutting
-    # interval = None, flipstitch = False, cyclize = False
-    tight_interval = [3.304, 3.710]
-    rec_raw.Cut(interval = tight_interval, flipstitch = True, cyclize = True)
-
-    ## show cutting result
-    # rec_raw.ShowData(display_columns = show_columns, show = True, rows = [3, 1], plot_kwargs = {'ls': '-', 'lw': 0.5, 'alpha': 0.6, 'zorder': 10})
-    # pause
-
-### frequency filtering
-    filter_order = 11
-    rec_fsd_pre = rec_raw.Copy()
-    rec_fsd_pre.ApplyFilter(apply_raw = True, filter_choice = 'fsd', filter_order = filter_order, n_periods = 1)
-
-    rec_fsd_post = rec_raw.Copy()
-    rec_fsd_post.ApplyFilter(apply_raw = False, filter_choice = 'fsd', filter_order = filter_order, n_periods = 1)
-
-    # remove flipstitch
-    for rec in [rec_raw, rec_fsd_pre, rec_fsd_post]:
-        rec.Cut(interval = tight_interval, flipstitch = False, cyclize = False)
-
-### cut again and plot
-    UniformPlot(rec_raw, rec_fsd_pre, rec_fsd_post, title = 'Forier Series (order = %i)' % (filter_order))
-
-
-
-
-def EMDFilter(rec_raw, settings = {}):
-
-    rec_raw = rec_raw.Copy()
-
-### baseline and cutting
-    # interval = None, flipstitch = False, cyclize = False
-    # rec_raw.Cut(interval = [3.304, 3.710], flipstitch = True)
-    # rec.Cut(interval = [3.0, 4.0], flipstitch = False, cyclize = False)
-
-### frequency filtering
-    rec_emd_pre = rec_raw.Copy()
-    rec_emd_pre.ApplyFilter(apply_raw = True, filter_choice = 'emd', **settings)
-
-    rec_emd_post = rec_raw.Copy()
-    rec_emd_post.ApplyFilter(apply_raw = False, filter_choice = 'emd', **settings)
-
-### cut again and plot
-    UniformPlot(rec_raw, rec_emd_pre, rec_emd_post, title = 'EMD Filter (complex)')
-
-
-
-
-
-#######################################################################
-### Uniform Plotting                                                ###
-#######################################################################
-def UniformPlot(rec_raw, rec_pre, rec_post, title = None):
-### cut again and plot
-    compared_interval = [3.2, 3.8]
-
-    rec_raw.Cut(interval = compared_interval, flipstitch = False, cyclize = False)
-    figax = rec_raw.ShowData(display_columns = show_columns, rows = [3, 1], plot_kwargs = {'ls': '-', 'lw': 0.5, 'alpha': 0.6, 'zorder': 10})
-
-    rec_pre.Cut(interval = compared_interval, flipstitch = False, cyclize = False)
-    rec_pre.ShowData( \
-                  display_columns = show_columns \
-                , figax = figax \
-                , suffix = 'fsd' \
-                , plot_kwargs = {'ls': '--', 'lw': 1, 'zorder': 40} \
-                )
-
-    rec_post.Cut(interval = compared_interval, flipstitch = False, cyclize = False)
-    rec_post.ShowData( \
-                  display_columns = show_columns \
-                , figax = figax \
-                , suffix = 'fsd' \
-                , plot_kwargs = {'ls': ':', 'lw': 1, 'zorder': 40} \
-                )
-
-    if title is not None:
-        MPP.gcf().suptitle(title)
-    MPP.gca().set_xlim(compared_interval)
-    MPP.show()
-
-
-
 
 #######################################################################
 ### User Settings                                                   ###
@@ -727,13 +544,6 @@ colors = {   'F_{x}': (0.5,0.5,0.9), 'F_{y}': (0.5,0.9,0.5), 'F_{z}': (0.9,0.5,0
             , 'M_{x}': (0.5,0.5,0.9), 'M_{y}': (0.5,0.9,0.5), 'M_{z}': (0.9,0.5,0.5) \
           }
 
-# show_columns = { \
-#               'forces': ['x'] \
-#             , 'moments': ['y'] \
-#           }
-# colors = { 'x': (0.8,0.8,0.8), 'y': (0.8,0.8,0.8)}
-
-
 
 forceplate_sensitivity = 100
 topmount_padding = (34.9) # mm 
@@ -742,89 +552,16 @@ convert_to_newtons = True
 convert_to_cartesian = True
 
 
-
-
 #######################################################################
 ### Mission Control                                                 ###
 #######################################################################
 if __name__ == "__main__":
-    # rec_raw = ForceRecording(rec_nr = 111)
-    rec_raw = ForceRecording(rec_nr = 111)
+    # rec_raw = ForceRecording(file = 'references/trial1.csv')
+    # rec_raw = ForceRecording(file = 'references/trial2.csv')
+    rec_raw = ForceRecording(file = 'recordings/20190709_goa_blue_rec111_force.csv')
     rec_raw.Baseline(interval = [0., 1.])
-    # rec_raw.ShowData(display_columns = show_columns, show = True, rows = [3, 1], plot_kwargs = {'ls': '-', 'lw': 0.5, 'alpha': 0.6, 'zorder': 10})
+    rec_raw.Cut(interval = [3.2, 4.2])
 
 
-### (0) baseline and cutting
-    if False:
-        # to test cutting
-        rec = rec_raw.Copy()
+    rec_raw.ShowData(display_columns = show_columns, show = True, rows = [3, 1], plot_kwargs = {'ls': '-', 'lw': 0.5, 'alpha': 0.6, 'zorder': 10})
 
-        # interval = None, flipstitch = False, cyclize = False
-        # rec.Cut(interval = [3.304, 3.710], flipstitch = True)
-        # rec.Cut(interval = [3.2, 3.710], flipstitch = True)
-
-        ## show cutting result
-        rec.ShowData(display_columns = show_columns, show = True, rows = [3, 1], plot_kwargs = {'ls': '-', 'lw': 0.5, 'alpha': 0.6, 'zorder': 10})
-        # pause
-
-
-## filter parameters:
-    #   gauss: float sigma
-    #   lowpass: float lowpass_frequency, int filter_order, int zero_pad
-    #   fsd: int filter_order, int n_periods
-    #   emd: int n_components; list(ints) retain_components; list(ints) remove_components 
-
-### (1) Gaussian Smoothing
-    if False:
-        Smoothing(rec_raw)
-
-### (2) Frequency Filter
-    if False:
-        # ## plot power spectrum
-        # filt = FILT.Filter(rec_raw['force'].copy())
-        # filt.PlotPowerSpectrum('F_{z}', window = 'blackmanharris', nperseg = 300, noverlap = 0.95, scaling='spectrum')
-
-        ## apply frq filter
-        FrequencyFilter(rec_raw)
-
-### (3) Fourier Series Filter
-    if False:
-        FSDFilter(rec_raw)
-
-
-### (4) Empirical Mode Decomposition
-    if False:
-        ## settings
-        n_components = 7
-        settings = dict( n_components = n_components \
-                    # , retain_components = list(NP.arange(n_components)[2:]) \
-                    , remove_components = {key: [0,1] for key in ['fx12', 'fx34', 'fy23', 'fy14', 'fz1', 'fz2', 'fz3', 'fz4' \
-                                                                , 'Fx12', 'Fx34', 'Fy23', 'Fy14', 'Fz1', 'Fz2', 'Fz3', 'Fz4' \
-                                                                , 'F_{x}', 'F_{y}', 'F_{z}', 'M_{x}', 'M_{y}', 'M_{z}']} \
-                    )
-
-        ## plot emd
-        filt = FILT.Filter(rec_raw['force'].copy())
-        #   ['fx12', 'fx34']   ['fy23', 'fy14']   ['fz1', 'fz2', 'fz3', 'fz4'] 
-        filt.PlotEMD( ['F_{z}'] \
-                    , **settings \
-                    )
-
-        ## apply emd filter
-        EMDFilter(rec_raw, settings)
-
-
-"""
-Filter Considerations:
-    - baseline 
-    - unit conversion
-    - sampling theory; hardware filters
-
-    - filter interval, flipstitch/cyclization, zero padding?
-    - channel computation/ filtering pre or post
-    - filter-specific parameters (generally affect smoothness)
-
-    - noise analysis and interpretation
-
-
-"""
