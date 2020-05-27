@@ -30,7 +30,8 @@ import matplotlib as MP # plotting
 import matplotlib.pyplot as MPP # plot control
 
 
-import ftdi1 as FTDI
+# import ftdi1 as FTDI
+import pyftdi as FTDI
 import uldaq as UL # MCC DAQ negotiation
 
 
