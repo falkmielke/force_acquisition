@@ -39,8 +39,8 @@ logger = logging.getLogger(__name__)
 
 ### MCC DAQ drivers and library
 # follow readme in https://github.com/mccdaq/uldaq
-    # download   $ wget https://github.com/mccdaq/uldaq/releases/download/v1.1.2/libuldaq-1.1.2.tar.bz2
-    # extract    $ tar -xvjf libuldaq-1.1.2.tar.bz2 && cd libuldaq-1.1.2
+    # download   $ wget -N https://github.com/mccdaq/uldaq/releases/download/v1.2.0/libuldaq-1.2.0.tar.bz2
+    # extract    $ tar -xvjf libuldaq-1.2.0.tar.bz2 && cd libuldaq-1.2.0
     # build      $ ./configure && make -j4 && sudo make install -j4
     # if "make" fails, you might need to do: ln -s /usr/bin/autom-1.16 /usr/bin/aclocal-1.14 && ln -s /usr/bin/automake-1.16 /usr/bin/automake-1.14
 # pip install uldaq
