@@ -32,12 +32,13 @@ class SilentForcePlateDAQ(IOT.TriggeredForcePlateDAQ):
 ################################################################################
 class Sensor(object):
 
-    def __init__(self, recording_duration = 1., clock_hz = 1.0e6, sr = 10000, trigger_pin = 5):
+    def __init__(self, recording_duration = 1., clock_hz = 1.0e6, sr = 10000, trigger_pin = 5, led_pin = 7):
 
         self.recording_duration = recording_duration
         self.clock_hz = clock_hz
         self.sr = sr
         self.trigger_pin = trigger_pin
+        self.led_pin = led_pin
 
         # find FT232H
         try:
@@ -61,6 +62,8 @@ class Sensor(object):
         self.signal = IOT.DeviceBufferLoader( device = self.device, generating_rate = self.sr ) #, max_length = 512 for post trigger
 
         self.ft_breakout.setup(self.trigger_pin, IOT.IN)
+        self.ft_breakout.setup(self.led_pin, IOT.OUT)
+        self.ft_breakout.output(self.led_pin, IOT.LOW)
 
         self.Empty()
         print ("Connected to NXP sensor via FT232H breakout.")
@@ -80,13 +83,14 @@ class Sensor(object):
             else:
                 break
 
-
+        self.ft_breakout.output(self.led_pin, IOT.HIGH)
         self.sync.append([TI.time(), 0])
         self.signal.Start()
         
         TI.sleep(self.recording_duration)
         self.signal.Stop()
         self.sync.append([TI.time(), -1])
+        self.ft_breakout.output(self.led_pin, IOT.LOW)
         
 
 
