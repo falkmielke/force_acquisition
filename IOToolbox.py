@@ -34,7 +34,9 @@ import matplotlib.pyplot as MPP # plot control
 # import ftdi1 as FTDI
 # import pyftdi as FTDI
 import ftdi1 as FTDI
-import uldaq as UL # MCC DAQ negotiation
+uldaq_skip_import = True
+if not uldaq_skip_import:
+    import uldaq as UL # MCC DAQ negotiation
 
 
 import logging
@@ -801,15 +803,20 @@ class TroggerLED(TH.Thread):
 
     def Blink(self):
         
-        for _ in range(int(self.duration//1)):
+        dt = 1/self.duration
+        # initially turn LED on for .5 secs
+        self.ft_breakout.output(self.pin, HIGH)
+        TI.sleep(.25)
+
+        for repeat in range(int(self.duration//1)):
             # Set pin to a low level so the LED turns off.
             self.ft_breakout.output(self.pin, LOW)
-            TI.sleep(.5)
+            TI.sleep(repeat*dt)
 
             # Set pin to a high level so the LED turns on.
             self.data_queue.put( "%i;%s;%f" % (7, True, TI.time()) )
             self.ft_breakout.output(self.pin, HIGH)
-            TI.sleep(.5)
+            TI.sleep(1.-repeat*dt)
 
         self.ft_breakout.output(self.pin, LOW)
 
@@ -956,10 +963,11 @@ instrument_labels = { '01DF5B18': 'blue' \
                     , '01DF5AFB': 'green'
                     }
 
-status_dict = { \
-                UL.ScanStatus.IDLE: 'idle' \
-                , UL.ScanStatus.RUNNING: 'running' \
-              }
+if not uldaq_skip_import:
+    status_dict = { \
+                    UL.ScanStatus.IDLE: 'idle' \
+                    , UL.ScanStatus.RUNNING: 'running' \
+                  }
 
 class MCCDAQ(object):
     # generic device functions
@@ -969,7 +977,8 @@ class MCCDAQ(object):
     HIGH = 255    
 
     # analog input recording mode
-    recording_mode = UL.ScanOption.BLOCKIO
+    if not uldaq_skip_import:
+        recording_mode = UL.ScanOption.BLOCKIO
     # recording_mode = UL.ScanOption.CONTINUOUS
 
     alive = False
@@ -1579,7 +1588,8 @@ forceplate_settings = AssembleForceplateSettings()
 ################################################################################
 class Oscilloscope(AnalogInput):
     # a MCC DAQ device, wired for analog input
-    recording_mode = UL.ScanOption.CONTINUOUS
+    if not uldaq_skip_import:
+        recording_mode = UL.ScanOption.CONTINUOUS
 
     def __init__(self, *args, **kwargs):
         super(Oscilloscope, self).__init__(*args, **kwargs)
@@ -2031,7 +2041,8 @@ class DAQForcePlateSoS(AnalogInput):
 class TriggeredForcePlateDAQ(AnalogInput):
 
     # record on external trigger
-    recording_mode = UL.ScanOption.EXTTRIGGER
+    if not uldaq_skip_import:
+        recording_mode = UL.ScanOption.EXTTRIGGER
 
 #______________________________________________________________________
 # Construction
