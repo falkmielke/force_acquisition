@@ -63,13 +63,18 @@ class Sensor(object):
         self.ft_breakout.setup(self.trigger_pin, IOT.IN)
 
         self.Empty()
+        print ("Connected to NXP sensor via FT232H breakout.")
 
 
     def Record(self, rising = False):
 
         status = not rising
         while True:
-            new = self.ft_breakout.input(self.trigger_pin)
+            try:
+                new = self.ft_breakout.input(self.trigger_pin)
+            except RuntimeError as rterr:
+                return
+
             if status == new:
                 TI.sleep(1/self.sr)
             else:
@@ -140,19 +145,19 @@ class ForceRecorder(object):
             print ('error in DAQ1 setup:\n\t', e, '\n')
 
 
-        # initialize second DAQ
-        try:
-            daq2 = SilentForcePlateDAQ( \
-                                  fp_type = 'kistler' \
-                                , device_nr = 1 \
-                                , pins = {'led': 7} \
-                                , sampling_rate = self.sampling_rate \
-                                , scan_frq = self.scan_frq \
-                                , recording_duration = self.recording_duration \
-                                )
-            self.daqs[daq2.label] = daq2
-        except Exception as e:
-            print ('error in DAQ2 setup:\n\t', e, '\n')
+        # # initialize second DAQ
+        # try:
+        #     daq2 = SilentForcePlateDAQ( \
+        #                           fp_type = 'kistler' \
+        #                         , device_nr = 1 \
+        #                         , pins = {'led': 7} \
+        #                         , sampling_rate = self.sampling_rate \
+        #                         , scan_frq = self.scan_frq \
+        #                         , recording_duration = self.recording_duration \
+        #                         )
+        #     self.daqs[daq2.label] = daq2
+        # except Exception as e:
+        #     print ('error in DAQ2 setup:\n\t', e, '\n')
 
         # initialize NXP sensor
         try:
@@ -196,7 +201,7 @@ class ForceRecorder(object):
 
     def PreparePlot(self):
 
-        self.fig, axes = MPP.subplots(1, len(self.device_labels))
+        self.fig, axes = MPP.subplots(1, NP.max([2, len(self.device_labels)]))
 
         self.fig.subplots_adjust( \
                               top    = 0.99 \
@@ -215,7 +220,7 @@ class ForceRecorder(object):
         # self.ax.set_title('press "E" to exit.')
 
         # draw all empty
-        MPP.show(False)
+        # MPP.show()
         MPP.draw()
         self.fig.canvas.draw()
 
@@ -303,7 +308,11 @@ class ForceRecorder(object):
 
     def LaunchPlates(self, daq):
         # will start up all the input devices
+        # try:
         daq.Record()
+        # except RuntimeError as rterr:
+        #     daq.Quit()
+        #     return
 
 
     def Record(self):
@@ -350,7 +359,7 @@ class ForceRecorder(object):
             device.Empty()
 
         
-        print('done recording %i! ' % (self.recording_counter), ' '*32)
+        print('done recording %03.0f! ' % (self.recording_counter), ' '*32)
         self.recording_counter += 1
 
     def Stop(self):
@@ -393,9 +402,9 @@ class ForceRecorder(object):
 ### Data Viewer                                                              ###
 ################################################################################
 all_data_columns = { \
-                      'nxp': ['a_x', 'a_y', 'a_z', 'g_x', 'g_y', 'g_z', 'm_x', 'm_y', 'm_z'] \
-                    , 'blue': list(sorted(IOT.forceplate_settings['dualkistler']['channel_order'])) \
-                    , 'green': list(sorted(IOT.forceplate_settings['dualkistler2']['channel_order'])) \
+                      'blue': list(sorted(IOT.forceplate_settings['kistler']['channel_order'])) \
+                    , 'nxp': ['a_x', 'a_y', 'a_z', 'g_x', 'g_y', 'g_z', 'm_x', 'm_y', 'm_z'] \
+                    , 'green': list(sorted(IOT.forceplate_settings['kistler']['channel_order'])) \
                     }
 
 plot_splits = { \
@@ -415,10 +424,12 @@ if __name__ == "__main__":
     recording_duration = 11 # s
     fr = ForceRecorder(   recording_duration = recording_duration \
                         , label = 'rats' \
-                        , sampling_rate = 1e3 \
+                        , sampling_rate = 12.0e3 
                         , scan_frq = 1e6 \
                         , clock_hz = 1.8e6 \
                         # , viewer = DataViewer(device_labels = ['nxp', 'blue', 'green']) \
                         )
 
     fr.Loop()
+
+    print('\n') # end last line

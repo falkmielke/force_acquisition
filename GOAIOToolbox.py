@@ -27,13 +27,11 @@ import pandas as PD # data storage
 import scipy.signal as SIG
 import math as MATH
 import matplotlib as MP # plotting
-MP.use('TkAgg')
 import matplotlib.pyplot as MPP # plot control
 
 
 # import ftdi1 as FTDI
-# import pyftdi as FTDI
-import ftdi1 as FTDI
+import pyftdi as FTDI
 import uldaq as UL # MCC DAQ negotiation
 
 
@@ -2121,13 +2119,7 @@ class TriggeredForcePlateDAQ(AnalogInput):
         self.sync.append([TI.time(), -1] )
 
         # wait until force plate records
-        while True:
-            try:
-                idle = self.GetDAQStatus()[1].current_scan_count == 0
-                if not idle:
-                    break
-            except UL.ULException as ul_exception:
-                return
+        while self.GetDAQStatus()[1].current_scan_count == 0:
             TI.sleep(1/self.scan_frq)
 
         # store start time
@@ -3551,7 +3543,7 @@ def TestMultiDAQ():
 if __name__ == "__main__":
     pass
     ### FT232H breakout function
-    # TestGPIO(5)
+    # TestGPIO(7)
     # TestGPIOInput(5)
     # TestTrogger(pins = [3, 5])
 

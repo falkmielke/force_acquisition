@@ -128,7 +128,7 @@ class ForceRecorder(object):
         self.daqs = {}
         try:
             daq1 = SilentForcePlateDAQ( \
-                                  fp_type = 'kistler' \
+                                  fp_type = 'dualkistler' \
                                 , device_nr = 0 \
                                 , pins = {'led': 7} \
                                 , sampling_rate = self.sampling_rate \
@@ -143,7 +143,7 @@ class ForceRecorder(object):
         # initialize second DAQ
         try:
             daq2 = SilentForcePlateDAQ( \
-                                  fp_type = 'kistler' \
+                                  fp_type = 'dualkistler2' \
                                 , device_nr = 1 \
                                 , pins = {'led': 7} \
                                 , sampling_rate = self.sampling_rate \
@@ -414,7 +414,7 @@ if __name__ == "__main__":
 
     recording_duration = 11 # s
     fr = ForceRecorder(   recording_duration = recording_duration \
-                        , label = 'rats' \
+                        , label = 'goa' \
                         , sampling_rate = 1e3 \
                         , scan_frq = 1e6 \
                         , clock_hz = 1.8e6 \
