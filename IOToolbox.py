@@ -755,7 +755,8 @@ class Ligger(TH.Thread):
             if not self.data_queue.empty():
                 data_str = self.data_queue.get()
                 self.PrintFiles(data_str)
-                if data_str.split(';')[1] == 'False':
+                split_data = data_str.split(';')
+                if (split_data[1] == 'False') and not (split_data[0] == '7'):
                     self.led_queue.put(True)
                 continue
             TI.sleep(1e-8)
@@ -804,20 +805,31 @@ class TroggerLED(TH.Thread):
     def Blink(self):
         
         dt = 1/self.duration
-        # initially turn LED on for .5 secs
+        
+        # initially switch LED for .5 secs
+        self.data_queue.put( "%i;%s;%f" % (7, True, TI.time()) )
         self.ft_breakout.output(self.pin, HIGH)
         TI.sleep(.25)
 
+        self.data_queue.put( "%i;%s;%f" % (7, False, TI.time()) )
+        self.ft_breakout.output(self.pin, LOW)
+        TI.sleep(.25)
+        
+
         for repeat in range(int(self.duration//1)):
             # Set pin to a low level so the LED turns off.
+
+            self.data_queue.put( "%i;%s;%f" % (7, False, TI.time()) )
             self.ft_breakout.output(self.pin, LOW)
-            TI.sleep(repeat*dt)
+            TI.sleep((repeat)*dt)
 
             # Set pin to a high level so the LED turns on.
             self.data_queue.put( "%i;%s;%f" % (7, True, TI.time()) )
             self.ft_breakout.output(self.pin, HIGH)
-            TI.sleep(1.-repeat*dt)
+            TI.sleep(1.-(repeat)*dt)
 
+
+        self.data_queue.put( "%i;%s;%f" % (7, False, TI.time()) )
         self.ft_breakout.output(self.pin, LOW)
 
     def Stop(self):
