@@ -426,10 +426,10 @@ plot_splits = { \
 if __name__ == "__main__":
 
 
-    recording_duration = 11. # s
+    recording_duration = 11 # s
     fr = ForceRecorder(   recording_duration = recording_duration \
                         , label = 'rats' \
-                        , sampling_rate = 20.0e3 
+                        , sampling_rate = 12.0e3 
                         , scan_frq = 1e6 \
                         , clock_hz = 1.8e6 \
                         # , viewer = DataViewer(device_labels = ['nxp', 'blue', 'green']) \
