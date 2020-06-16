@@ -756,7 +756,7 @@ class Ligger(TH.Thread):
                 data_str = self.data_queue.get()
                 self.PrintFiles(data_str)
                 split_data = data_str.split(';')
-                if (split_data[1] == 'False') and not (split_data[0] == '7'):
+                if (split_data[1] == 'False'):# and not (split_data[0] == '7'):
                     self.led_queue.put(True)
                 continue
             TI.sleep(1e-8)
@@ -807,29 +807,31 @@ class TroggerLED(TH.Thread):
         dt = 1/self.duration
         
         # initially switch LED for .5 secs
-        self.data_queue.put( "%i;%s;%f" % (7, True, TI.time()) )
+        self.data_queue.put( "%i;%s;%f" % (7, 'on0', TI.time()) )
         self.ft_breakout.output(self.pin, HIGH)
         TI.sleep(.25)
+        self.data_queue.put( "%i;%s;%f" % (7, 'off0', TI.time()) )
 
-        self.data_queue.put( "%i;%s;%f" % (7, False, TI.time()) )
-        self.ft_breakout.output(self.pin, LOW)
-        TI.sleep(.25)
+        # self.data_queue.put( "%i;%s;%f" % (7, False, TI.time()) )
+        # self.ft_breakout.output(self.pin, LOW)
+        # TI.sleep(.25)
         
 
         for repeat in range(int(self.duration//1)):
             # Set pin to a low level so the LED turns off.
 
-            self.data_queue.put( "%i;%s;%f" % (7, False, TI.time()) )
+            # self.data_queue.put( "%i;%s;%f" % (7, False, TI.time()) )
             self.ft_breakout.output(self.pin, LOW)
             TI.sleep((repeat)*dt)
 
             # Set pin to a high level so the LED turns on.
-            self.data_queue.put( "%i;%s;%f" % (7, True, TI.time()) )
+            self.data_queue.put( "%i;%s;%f" % (7, 'on%i' % (repeat+1), TI.time()) )
             self.ft_breakout.output(self.pin, HIGH)
             TI.sleep(1.-(repeat)*dt)
+            self.data_queue.put( "%i;%s;%f" % (7, 'off%i' % (repeat+1), TI.time()) )
 
 
-        self.data_queue.put( "%i;%s;%f" % (7, False, TI.time()) )
+        # self.data_queue.put( "%i;%s;%f" % (7, False, TI.time()) )
         self.ft_breakout.output(self.pin, LOW)
 
     def Stop(self):
@@ -892,7 +894,7 @@ class LoggedPin(Shouter):
 class Trogger(object):
     # A Trigger-Logger
 
-    def __init__(self, pins = [], serial = None, storage_file = None):
+    def __init__(self, pins = [], serial = None, storage_file = None, led_duration = 10.):
 
         if serial is None:
             self.ft_breakout = FT232H(serial = FindDevices()[0])
@@ -911,13 +913,18 @@ class Trogger(object):
 
         # spawn threads to process
 
-        self.logged_pins = [LoggedPin(self.ft_breakout, pin, data_queue = self.archivar.data_queue, autostart = True, label = str(pin)) for pin in pins]
+        self.logged_pins = [LoggedPin(self.ft_breakout, pin, data_queue = self.archivar.data_queue \
+                                        , autostart = True, label = str(pin) \
+                                     ) for pin in pins]
 
         for lpin in self.logged_pins:
             lpin.data_queue.put( "%i;%s;%f" % (lpin.pin_nr, str(lpin.status), TI.time()) )
 
         print ('trogger led')
-        self.indicator = TroggerLED(pin = 7, ft_breakout = self.ft_breakout, led_queue = self.archivar.led_queue, data_queue = self.archivar.data_queue) 
+        self.indicator = TroggerLED(  pin = 7, ft_breakout = self.ft_breakout \
+                                    , led_queue = self.archivar.led_queue, data_queue = self.archivar.data_queue \
+                                    , duration = led_duration \
+                                    ) 
         self.indicator.setDaemon(True)
         self.indicator.start()
 
