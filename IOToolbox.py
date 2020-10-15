@@ -34,7 +34,7 @@ import matplotlib.pyplot as MPP # plot control
 # import ftdi1 as FTDI
 # import pyftdi as FTDI
 import ftdi1 as FTDI
-uldaq_skip_import = True
+uldaq_skip_import = False
 if not uldaq_skip_import:
     import uldaq as UL # MCC DAQ negotiation
 
@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 # follow readme in https://github.com/mccdaq/uldaq
     # download   $ wget -N https://github.com/mccdaq/uldaq/releases/download/v1.2.0/libuldaq-1.2.0.tar.bz2
     # extract    $ tar -xvjf libuldaq-1.2.0.tar.bz2 && cd libuldaq-1.2.0
-    # build      $ ./configure && make -j4 && sudo make install -j4
+    # build      $ ./configure && make -j2 && sudo make install -j2
     # if "make" fails, you might need to do: ln -s /usr/bin/autom-1.16 /usr/bin/aclocal-1.14 && ln -s /usr/bin/automake-1.16 /usr/bin/automake-1.14
 # pip install uldaq
 
@@ -1773,6 +1773,8 @@ class LED(object):
         self.digital_io = digital_io
         self.port = port
         self.pin_nr = pin_nr
+
+        self.Switch(False)
 
 
     def Switch(self, value_bool):

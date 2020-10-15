@@ -7,3 +7,4 @@ camera_acquisition/frames/*
 camera_acquisition/recordings/*
 camera_acquisition/testrecs/*
 camera_acquisition/videos/*
+libuldaq-1.2.0/*
