@@ -246,38 +246,38 @@ class ForceRecorder(object):
 
     def UpdatePlot(self):
 
-            rec_nr, daq, data = self.q.popleft()
+        rec_nr, daq, data = self.q.popleft()
 
-            # restore background
-            # self.fig.canvas.restore_region(self.plot_backgrounds[daq])
-            self.RestoreAxes()
+        # restore background
+        self.fig.canvas.restore_region(self.plot_backgrounds[daq])
+        # self.RestoreAxes()
 
-            # self.fig.suptitle("recording %i" % (rec_nr))
+        # self.fig.suptitle("recording %i" % (rec_nr))
 
-            # adjust and redraw data
-            y_ticks = []
-            for col in data.columns:
-
-
-                t = NP.linspace(0, self.recording_duration, data.shape[0], endpoint = False)
-                y = NP.array(data[col].values, dtype = float)
-                
-                # normalize
-                y -= y[0]
-                y /= (NP.max(y)-NP.min(y)+1e-3)/2
-
-                # shift
-                offset = len(all_data_columns[daq])-all_data_columns[daq].index(col)
-                y += offset
-
-                self.handles[col].set_data(t, y) # plot one less to avoid flickering
-                self.ax_dict[daq].draw_artist(self.handles[col])
+        # adjust and redraw data
+        y_ticks = []
+        for col in data.columns:
 
 
+            t = NP.linspace(0, self.recording_duration, data.shape[0], endpoint = False)
+            y = NP.array(data[col].values, dtype = float)
+            
+            # normalize
+            y -= y[0]
+            y /= (NP.max(y)-NP.min(y)+1e-3)/2
+
+            # shift
+            offset = len(all_data_columns[daq])-all_data_columns[daq].index(col)
+            y += offset
+
+            self.handles[col].set_data(t, y) # plot one less to avoid flickering
+            self.ax_dict[daq].draw_artist(self.handles[col])
 
 
-            self.ax_dict[daq].set_title("recording %i" % (rec_nr))
-            self.fig.canvas.blit(self.ax_dict[daq].bbox)
+
+
+        self.ax_dict[daq].set_title("recording %i" % (rec_nr))
+        self.fig.canvas.blit(self.ax_dict[daq].bbox)
 
 
 
@@ -397,6 +397,7 @@ class ForceRecorder(object):
             MPP.pause(1.e0)
             while (len(self.q) > 0):
                 self.UpdatePlot()
+                MPP.pause(1.e-1)
 
 
 
