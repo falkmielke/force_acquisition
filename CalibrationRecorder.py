@@ -73,7 +73,7 @@ class CalibrationRecorder(object):
     def PrepareAutosave(self):
         # auto file saving
         self.datetag = TI.strftime('%Y%m%d')
-        self.file_pattern = "data/{date:s}_{label:s}_{daq:s}_rec{nr:03.0f}_{suffix:s}.csv"
+        self.file_pattern = "data/{date:s}_{label:s}_calibration_rec{nr:03.0f}_{suffix:s}.csv"
         self.suffix = ''
 
         # check how many previous recordings there were
@@ -139,8 +139,8 @@ class CalibrationRecorder(object):
 
         for daq, device in self.daqs.items():
             sync, data = device.RetrieveOutput()
-            sync.to_csv(MakeFileName(daq = daq, suffix = 'sync'), sep = ';', index = False)
-            data.to_csv(MakeFileName(daq = daq, suffix = 'force'), sep = ';')
+            # sync.to_csv(MakeFileName(daq = daq, suffix = 'sync'), sep = ';', index = False)
+            data.to_csv(MakeFileName(daq = daq, suffix = ''), sep = ';')
 
             # send to viewer
             self.q.append([self.recording_counter, daq, data])
