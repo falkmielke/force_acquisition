@@ -400,6 +400,9 @@ class ForceRecorder(object):
                 MPP.pause(1.e-1)
 
 
+        print('\n') # end last line
+
+
 
 
 
@@ -437,5 +440,3 @@ if __name__ == "__main__":
                         )
 
     fr.Loop()
-
-    print('\n') # end last line
