@@ -63,9 +63,9 @@ logger = logging.getLogger(__name__)
 
 
 ## software
-# wget https://www.intra2net.com/en/developer/libftdi/download/libftdi1-1.4.tar.bz2
-# tar -xvf libftdi1-1.4.tar.bz2
-# cd libftdi1-1.4
+# wget https://www.intra2net.com/en/developer/libftdi/download/libftdi1-1.5.tar.bz2
+# tar -xvf libftdi1-1.5.tar.bz2
+# cd libftdi1-1.5
 # mkdir build && cd build
 
 # cmake -DCMAKE_INSTALL_PREFIX="/usr" ../
