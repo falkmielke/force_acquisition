@@ -11,7 +11,7 @@ MP.use('TkAgg')
 import matplotlib.pyplot as MPP
 
 
-PD.set_option('precision', 5)
+# PD.set_option('precision', 5)
 SYM.init_printing(use_latex=False)
 
 
@@ -613,7 +613,7 @@ convert_to_cartesian = True
 if __name__ == "__main__":
     # rec_raw = ForceRecording(file = 'references/trial1.csv')
     # rec_raw = ForceRecording(file = 'references/trial2.csv')
-    rec_raw = ForceRecording(file = 'data/20210606_kistler1_blue_rec002_force.csv')
+    rec_raw = ForceRecording(file = 'data/20220907_lizards_rec001_force.csv')
     rec_raw.Baseline(interval = [0., 1.])
     rec_raw.Cut(interval = [1.0, 3.0])
 

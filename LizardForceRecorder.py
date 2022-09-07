@@ -57,7 +57,7 @@ class ForceRecorder(object):
             daq1 = SilentForcePlateDAQ( \
                                   fp_type = 'kistler' \
                                 , device_nr = 0 \
-                                , pins = {'trigger': 5, 'led': 7} \
+                                , pins = {'led': 7} \
                                 , sampling_rate = self.sampling_rate \
                                 , scan_frq = self.scan_frq \
                                 , recording_duration = self.recording_duration \

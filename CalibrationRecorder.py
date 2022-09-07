@@ -17,7 +17,11 @@ from collections import deque as DEQue # double ended queue
 
 import matplotlib as MP # plotting
 import matplotlib.pyplot as MPP # plot control
+MP.use('TkAgg')
 
+# check if there is a data folder
+if not OS.path.exists('data'):
+    OS.makedirs('data')
 
 ################################################################################
 ### Muted Force Plate                                                        ###
@@ -73,7 +77,7 @@ class CalibrationRecorder(object):
     def PrepareAutosave(self):
         # auto file saving
         self.datetag = TI.strftime('%Y%m%d')
-        self.file_pattern = "data/{date:s}_{label:s}_calibration_rec{nr:03.0f}_{suffix:s}.csv"
+        self.file_pattern = "data/{date:s}_{label:s}_calibration_rec{nr:03.0f}{suffix:s}.csv"
         self.suffix = ''
 
         # check how many previous recordings there were
@@ -191,9 +195,9 @@ if __name__ == "__main__":
 
 
     recording_duration = 6. # s
-    fr = CalibrationRecorder(   recording_duration = recording_duration \
-                        , label = 'kistler1' \
-                        , sampling_rate = 20.0e3 
-                        )
+    fr = CalibrationRecorder( recording_duration = recording_duration \
+                            , label = 'kistler' \
+                            , sampling_rate = 10.0e3
+                            )
 
     fr.Loop()
