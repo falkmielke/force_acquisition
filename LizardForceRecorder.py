@@ -184,12 +184,13 @@ class ForceRecorder(object):
         counts = [0]
         for file in previous_recordings:
             filename = OS.path.splitext(file)[0]
-            found = RE.findall(r"(?<=_rec)\d*_", filename) # find file name patterns of the type "*daqXXX_*"
+            found = RE.findall(r"(?<=_rec)\d*", filename) # find file name patterns of the type "*daqXXX_*"
             # print (filename, found)
             if not (len(found) == 0):
-                counts.append(int(found[0][:-1]))
+                counts.append(int(found[0])) #[:-1]
 
         self.recording_counter = max(counts) + 1
+        print (f'continuing on recording {self.recording_counter}')
 
 
 
@@ -315,3 +316,6 @@ if __name__ == "__main__":
                    , sampling_rate = 10e3 # Hz \
                    , label = 'lizards' \
                    ).Loop() # (starting immediately)
+
+
+    

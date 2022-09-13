@@ -12,3 +12,5 @@ with IOT.Oscilloscope( \
         as osci:
 
         osci.Show(window = 6)
+
+        

@@ -81,16 +81,18 @@ class CalibrationRecorder(object):
         self.suffix = ''
 
         # check how many previous recordings there were
-        previous_recordings = [file for file in OS.listdir('data') if OS.path.splitext(file)[1] == '.csv']
+        previous_recordings = list(sorted([file for file in OS.listdir('data') if OS.path.splitext(file)[1] == '.csv']))
         counts = [0]
+        #print (len(previous_recordings))
         for file in previous_recordings:
             filename = OS.path.splitext(file)[0]
-            found = RE.findall(r"(?<=_rec)\d*_", filename) # find file name patterns of the type "*daqXXX_*"
-            # print (filename, found)
+            found = RE.findall(r"(?<=_rec)\d*", filename) # find file name patterns of the type "*daqXXX_*"
+            print (filename, found)
             if not (len(found) == 0):
-                counts.append(int(found[0][:-1]))
+                counts.append(int(found[0]))#[:-1]
 
         self.recording_counter = max(counts) + 1
+        #print (self.recording_counter)
 
 
 
