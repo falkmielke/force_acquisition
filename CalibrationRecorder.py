@@ -87,12 +87,14 @@ class CalibrationRecorder(object):
         for file in previous_recordings:
             filename = OS.path.splitext(file)[0]
             found = RE.findall(r"(?<=_rec)\d*", filename) # find file name patterns of the type "*daqXXX_*"
-            print (filename, found)
+            # print (filename, found)
             if not (len(found) == 0):
                 counts.append(int(found[0]))#[:-1]
 
         self.recording_counter = max(counts) + 1
         #print (self.recording_counter)
+        print (f'continuing on recording {self.recording_counter}')
+
 
 
 
